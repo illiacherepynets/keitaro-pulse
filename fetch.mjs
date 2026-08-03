@@ -31,7 +31,8 @@ const __dir = dirname(fileURLToPath(import.meta.url));
 
 async function loadConfig() {
   if (process.env.KT_TEAMS) {
-    return { teams: JSON.parse(process.env.KT_TEAMS), password: process.env.KT_PASSWORD || "" };
+    const j = JSON.parse(process.env.KT_TEAMS);
+    return { teams: Array.isArray(j) ? j : j.teams, password: process.env.KT_PASSWORD || "" };
   }
   try {
     const j = JSON.parse(await readFile(join(__dir, "teams.local.json"), "utf8"));
