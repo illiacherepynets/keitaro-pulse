@@ -1,0 +1,44 @@
+name: Build & Deploy Keitaro Pulse
+
+on:
+  schedule:
+    # 07:00 UTC = 10:00 Київ (літо) / 09:00 (зима). GitHub може затримати старт на кілька хв.
+    - cron: "0 7 * * *"
+  workflow_dispatch: {}   # кнопка "Run workflow" для ручного запуску
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Build dashboard
+        env:
+          KT_TEAMS: ${{ secrets.KT_TEAMS }}
+          KT_PASSWORD: ${{ secrets.KT_PASSWORD }}
+          KT_OUT: public/index.html
+        run: node fetch.mjs
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

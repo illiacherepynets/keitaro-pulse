@@ -1,0 +1,8 @@
+# СЕКРЕТИ — ніколи не комітити
+teams.local.json
+
+# Згенеровані артефакти
+dashboard.html
+public/
+node_modules/
+*.zip

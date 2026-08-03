@@ -1,0 +1,751 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Keitaro • Pulse</title>
+<style>
+  :root{
+    --bg:#0e131f; --bg2:#131a29;
+    --panel:rgba(24,31,46,.72); --panel-solid:#181f2e; --elev:#212a3e;
+    --border:rgba(72,88,124,.32); --border-hi:rgba(79,157,255,.45);
+    --fg:#e9edf6; --dim:#98a3ba; --faint:#5f6b83;
+    --blue:#4f9dff; --cyan:#38d6e0; --green:#48d597; --gold:#f4b73d; --red:#f2565b; --purple:#b578f0;
+    --mono:ui-monospace,"JetBrains Mono","Cascadia Code",Consolas,monospace;
+    --radius:14px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--bg); color:var(--fg);
+    font-family:system-ui,"Segoe UI",-apple-system,sans-serif;
+    -webkit-font-smoothing:antialiased;
+    background-image:
+      radial-gradient(at 18% -5%, rgba(59,110,220,.20) 0, transparent 45%),
+      radial-gradient(at 88% 108%, rgba(40,190,200,.14) 0, transparent 45%);
+    background-attachment:fixed; min-height:100vh;
+  }
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-thumb{background:var(--border);border-radius:6px}
+  ::-webkit-scrollbar-thumb:hover{background:var(--faint)}
+  .mono{font-family:var(--mono);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+  a{color:var(--blue);text-decoration:none}
+
+  header{
+    position:sticky;top:0;z-index:20;
+    background:linear-gradient(180deg,rgba(14,19,31,.97),rgba(14,19,31,.86));
+    backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+    border-bottom:1px solid var(--border); padding:12px 22px;
+  }
+  .hrow{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  .hrow+.hrow{margin-top:11px}
+  .brand{display:flex;align-items:center;gap:11px;margin-right:auto}
+  .logo{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,var(--blue),var(--cyan));
+    display:flex;align-items:center;justify-content:center;font-weight:800;color:#0b1018;font-size:18px;
+    box-shadow:0 0 22px rgba(79,157,255,.4)}
+  .brand h1{font-size:16px;margin:0;font-weight:700;letter-spacing:.2px}
+  .brand .sub{font-size:11.5px;color:var(--dim);margin-top:1px}
+  .meta{font-size:11px;color:var(--faint);text-align:right;line-height:1.5}
+  .meta b{color:var(--dim);font-weight:600}
+
+  .seg{display:inline-flex;background:var(--panel-solid);border:1px solid var(--border);border-radius:10px;padding:3px;gap:2px}
+  .seg button{background:transparent;border:0;color:var(--dim);font:inherit;font-size:12.5px;font-weight:600;
+    padding:6px 12px;border-radius:7px;cursor:pointer;transition:.15s;white-space:nowrap}
+  .seg button:hover{color:var(--fg)}
+  .seg button.on{background:linear-gradient(135deg,var(--blue),#3a7fe0);color:#08101f;box-shadow:0 2px 10px rgba(79,157,255,.35)}
+  .seg.alt button.on{background:linear-gradient(135deg,var(--purple),#8a5be0)}
+  .seg.tm button.on{background:linear-gradient(135deg,var(--green),#2fae76);color:#08130d}
+  .chip.tm{background:rgba(72,213,151,.13);color:var(--green);border-color:rgba(72,213,151,.28)}
+  select.day{background:var(--panel-solid);border:1px solid var(--border);color:var(--fg);font:inherit;font-size:12.5px;
+    padding:7px 11px;border-radius:9px;cursor:pointer}
+  select.day:focus{outline:none;border-color:var(--border-hi)}
+
+  .flabel{font-size:11px;color:var(--faint);text-transform:uppercase;letter-spacing:.6px;font-weight:700;margin-right:-4px}
+  input.fq{background:var(--panel-solid);border:1px solid var(--border);color:var(--fg);font:inherit;font-size:13px;
+    padding:8px 13px;border-radius:9px;min-width:260px;flex:1;max-width:420px}
+  input.fq:focus{outline:none;border-color:var(--border-hi);box-shadow:0 0 0 3px rgba(79,157,255,.12)}
+  #fchip{margin-left:auto;display:flex;align-items:center;gap:8px}
+  .active-chip{display:inline-flex;align-items:center;gap:9px;font-size:12px;
+    background:rgba(79,157,255,.12);border:1px solid var(--border-hi);border-radius:20px;padding:5px 6px 5px 13px;font-weight:600}
+  .active-chip.brand{background:rgba(181,120,240,.14);border-color:rgba(181,120,240,.5)}
+  .active-chip .x{cursor:pointer;width:19px;height:19px;border-radius:50%;background:rgba(255,255,255,.08);
+    display:inline-flex;align-items:center;justify-content:center;font-size:12px;color:var(--fg)}
+  .active-chip .x:hover{background:var(--red);color:#fff}
+  .active-chip .cnt{color:var(--dim);font-weight:500;font-size:11px}
+
+  main{padding:18px 22px 60px;max-width:1500px;margin:0 auto}
+
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:18px}
+  .kpi{background:var(--panel);backdrop-filter:blur(10px);border:1px solid var(--border);border-radius:var(--radius);
+    padding:15px 16px;position:relative;overflow:hidden}
+  .kpi::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--accent,var(--blue))}
+  .kpi .lbl{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.6px;font-weight:600}
+  .kpi .val{font-size:26px;font-weight:700;margin-top:7px;line-height:1}
+  .kpi .dl{font-size:11.5px;margin-top:7px;font-weight:600;display:flex;align-items:center;gap:5px}
+  .up{color:var(--green)} .down{color:var(--red)} .flat{color:var(--faint)}
+
+  .grid{display:grid;gap:16px;margin-bottom:16px}
+  .g2{grid-template-columns:1fr 1fr}
+  .g3{grid-template-columns:2fr 1fr}
+  @media(max-width:1050px){.g2,.g3{grid-template-columns:1fr}}
+  .panel{background:var(--panel);backdrop-filter:blur(10px);border:1px solid var(--border);border-radius:var(--radius);padding:17px 18px}
+  .panel h2{font-size:13.5px;margin:0;font-weight:700;letter-spacing:.2px}
+  .panel .psub{font-size:11.5px;color:var(--dim);margin-top:2px}
+  .phead{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;gap:10px}
+  .tag-all{font-size:10px;color:var(--faint);border:1px solid var(--border);border-radius:6px;padding:2px 7px;font-weight:600;white-space:nowrap}
+
+  .tools{display:flex;gap:8px;align-items:center}
+  input.search{background:var(--bg2);border:1px solid var(--border);color:var(--fg);font:inherit;font-size:12px;
+    padding:6px 10px;border-radius:8px;width:140px}
+  input.search:focus{outline:none;border-color:var(--border-hi)}
+  .tbl-wrap{overflow:auto;margin:0 -4px;max-height:460px}
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th,td{padding:8px 9px;text-align:right;white-space:nowrap}
+  th:first-child,td:first-child{text-align:left}
+  th{color:var(--dim);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.4px;
+    cursor:pointer;user-select:none;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--panel-solid);z-index:1}
+  th:hover{color:var(--fg)}
+  th.sorted::after{content:" ↓";color:var(--blue)}
+  th.sorted.asc::after{content:" ↑"}
+  tbody tr{border-bottom:1px solid rgba(72,88,124,.14);cursor:pointer}
+  tbody tr:hover{background:rgba(79,157,255,.07)}
+  tbody tr.nolink{cursor:default}
+  td .site{font-weight:600;color:var(--fg)}
+  .chip{display:inline-block;font-size:10.5px;padding:1px 7px;border-radius:20px;font-weight:600;
+    background:rgba(79,157,255,.14);color:var(--blue);border:1px solid rgba(79,157,255,.25)}
+  .chip.geo{background:rgba(56,214,224,.13);color:var(--cyan);border-color:rgba(56,214,224,.25)}
+  .conv-badge{color:var(--gold);font-weight:700}
+  .zero{color:var(--faint)}
+  .bar-cell{position:relative}
+  .bar-cell .bar{position:absolute;left:0;top:50%;transform:translateY(-50%);height:60%;border-radius:3px;opacity:.16;background:var(--blue);z-index:0}
+  .bar-cell span{position:relative;z-index:1}
+  .emptycell{color:var(--faint);padding:18px 6px}
+
+  .dist{display:flex;flex-direction:column;gap:9px}
+  .dist .row{display:flex;align-items:center;gap:11px}
+  .dist .name{width:130px;font-size:12px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0}
+  .dist .track{flex:1;height:8px;background:var(--bg2);border-radius:5px;overflow:hidden}
+  .dist .fill{height:100%;border-radius:5px;background:linear-gradient(90deg,var(--blue),var(--cyan))}
+  .dist .v{width:92px;text-align:right;font-size:12px;color:var(--dim)}
+  .dist-head{display:flex;justify-content:space-between;font-size:10px;color:var(--faint);text-transform:uppercase;
+    letter-spacing:.5px;font-weight:700;padding-bottom:7px;margin-bottom:3px;border-bottom:1px solid var(--border)}
+  .drow{cursor:pointer;border-radius:7px;transition:background .12s}
+  .drow:hover{background:rgba(79,157,255,.09)}
+  .drow.sel{background:rgba(181,120,240,.16);box-shadow:inset 2px 0 0 var(--purple)}
+  .sublabel{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;font-weight:600;margin:2px 0}
+
+  .foot{color:var(--faint);font-size:11px;text-align:center;margin-top:26px}
+  .empty{max-width:620px;margin:14vh auto;text-align:center;background:var(--panel);border:1px solid var(--border);
+    border-radius:18px;padding:40px 34px}
+  .empty h1{font-size:22px;margin:0 0 6px}
+  .empty code{background:var(--bg2);padding:3px 9px;border-radius:6px;font-family:var(--mono);color:var(--cyan);font-size:14px}
+  .empty p{color:var(--dim);line-height:1.7}
+
+  .chart-wrap{position:relative}
+  svg.chart{display:block;width:100%;height:auto;overflow:visible}
+  .tip{position:absolute;pointer-events:none;background:rgba(16,22,35,.96);border:1px solid var(--border-hi);
+    border-radius:9px;padding:8px 11px;font-size:11.5px;line-height:1.6;opacity:0;transition:opacity .1s;
+    box-shadow:0 8px 24px rgba(0,0,0,.4);z-index:5;white-space:nowrap}
+  .tip b{color:var(--fg)} .tip .k{color:var(--dim)}
+  .legend{display:flex;gap:16px;font-size:11.5px;color:var(--dim);margin-top:4px}
+  .legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+  .hint{font-size:11px;color:var(--faint);margin-top:10px;text-align:center}
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>/*__KT_DATA__*/</script>
+<script>
+function KT_boot(D){
+  const app = document.getElementById("app");
+
+  // ── helpers ──────────────────────────────────────────────────────────────
+  const N = D.days.length;
+  const fmtInt = n => Math.round(n).toLocaleString("uk-UA").replace(/,/g," ");
+  const fmtMoney = n => "$"+ Math.round(n).toLocaleString("uk-UA").replace(/,/g," ");
+  const fmtPct = n => n.toFixed(2)+"%";
+  const shortDay = d => d.slice(5);
+  const div = (a,b)=> b>0 ? a/b : 0;
+  const esc = s => String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+  const cmp = (a,b)=> typeof a==="string" ? (a<b?-1:a>b?1:0) : (a||0)-(b||0);
+  const teamShort = (i)=>{ const n=(D.teams&&D.teams[i])||""; const m=n.match(/(\d+)\s*$/); return m?("К"+m[1]):n.slice(0,6); };
+
+  const campTeam = D.camps.map(c=>c[4]);   // campIdx → teamIdx
+  const nTeams = (D.teams||["—"]).length;
+
+  // ── state ──────────────────────────────────────────────────────────────────
+  const state = {
+    mode:"all", fromIdx:0, toIdx:N-1, dayIdx:N-1, selectedPage:null, team:-1,  // team: -1 = усі
+    filter:{ type:"site", match:"partial", q:"", active:false, campSet:null, offerSet:null }
+  };
+  const teamOK = (t)=> state.team<0 || t===state.team;
+
+  function setRange(){
+    if(state.mode==="all"){ state.fromIdx=0; state.toIdx=N-1; }
+    else if(state.mode==="day"){ state.fromIdx=state.dayIdx; state.toIdx=state.dayIdx; }
+    else { const k=+state.mode; state.toIdx=N-1; state.fromIdx=Math.max(0,N-k); }
+  }
+
+  function computeFilter(){
+    const f=state.filter;
+    if(!f.q.trim()){ f.active=false; f.campSet=null; f.offerSet=null; return; }
+    f.active=true;
+    const q=f.q.trim().toLowerCase();
+    const test = f.match==="exact" ? s=>String(s).toLowerCase()===q : s=>String(s).toLowerCase().includes(q);
+    if(f.type==="site"){
+      const cs=new Set();
+      D.camps.forEach((c,ci)=>{ if(teamOK(c[4]) && test(c[1])) cs.add(ci); });
+      const os=new Set();
+      for(const r of D.rel){ if(cs.has(r[0])) os.add(r[1]); }
+      f.campSet=cs; f.offerSet=os;
+    }else{
+      const os=new Set();
+      D.offers.forEach((o,oi)=>{ if(test(o)) os.add(oi); });
+      const cs=new Set();
+      for(const r of D.rel){ if(os.has(r[1]) && teamOK(campTeam[r[0]])) cs.add(r[0]); }
+      f.offerSet=os; f.campSet=cs;
+    }
+  }
+
+  // ── aggregation (range-aware, from day-level cd/od) ─────────────────────────
+  // per-day series [clicks,conv,leads,sales,rev] respecting the active filter
+  // per-day: [clicks,conv,leads,sales,rev,saleRev] — з урахуванням команди + фільтра
+  function seriesData(){
+    const f=state.filter, per=Array.from({length:N},()=>[0,0,0,0,0,0]);
+    if(f.active && f.type==="brand"){
+      for(const r of D.od){ if(!f.offerSet.has(r[1])||!teamOK(r[8])) continue; const d=per[r[0]]; d[0]+=r[2];d[1]+=r[3];d[2]+=r[4];d[3]+=r[5];d[4]+=r[6];d[5]+=r[7]; }
+    }else if(f.active && f.type==="site"){
+      for(const r of D.cd){ if(!f.campSet.has(r[1])||!teamOK(campTeam[r[1]])) continue; const d=per[r[0]]; d[0]+=r[2];d[1]+=r[3];d[2]+=r[4];d[3]+=r[5];d[4]+=r[6];d[5]+=r[7]; }
+    }else{
+      for(let t=0;t<nTeams;t++){ if(!teamOK(t)) continue; const tt=D.totals[t]; if(!tt) continue;
+        for(let i=0;i<N;i++){ const s=tt[i], d=per[i]; for(let j=0;j<6;j++) d[j]+=s[j]; } }
+    }
+    return per;
+  }
+  function sumRange(per,from,to){ const s=[0,0,0,0,0,0]; for(let i=from;i<=to;i++) for(let j=0;j<6;j++) s[j]+=per[i][j]; return s; }
+
+  // agg arrays: [clicks,conv,leads,sales,rev,saleRev] — з урахуванням команди
+  function aggCampaigns(from,to,restrict){
+    const m=new Map();
+    for(const r of D.cd){ const di=r[0]; if(di<from||di>to) continue; if(restrict&&!restrict.has(r[1])) continue; if(!teamOK(campTeam[r[1]])) continue;
+      let a=m.get(r[1]); if(!a){a=[0,0,0,0,0,0];m.set(r[1],a);} a[0]+=r[2];a[1]+=r[3];a[2]+=r[4];a[3]+=r[5];a[4]+=r[6];a[5]+=r[7]; }
+    return m;
+  }
+  function aggOffers(from,to,restrict){
+    const m=new Map();
+    for(const r of D.od){ const di=r[0]; if(di<from||di>to) continue; if(restrict&&!restrict.has(r[1])) continue; if(!teamOK(r[8])) continue;
+      let a=m.get(r[1]); if(!a){a=[0,0,0,0,0,0];m.set(r[1],a);} a[0]+=r[2];a[1]+=r[3];a[2]+=r[4];a[3]+=r[5];a[4]+=r[6];a[5]+=r[7]; }
+    return m;
+  }
+  // relationship aggregation (whole history). groupCol: index in rel row; restrict on entityCol.
+  function relGroup(groupCol, entityCol, entitySet){
+    const m=new Map();
+    for(const r of D.rel){ if(entitySet&&!entitySet.has(r[entityCol])) continue; if(!teamOK(campTeam[r[0]])) continue;
+      const k=r[groupCol]; let a=m.get(k); if(!a){a=[0,0,0,0,0,0];m.set(k,a);} a[0]+=r[4];a[1]+=r[5];a[2]+=r[6];a[3]+=r[7];a[4]+=r[8];a[5]+=r[9]; }
+    return m; // key -> [clicks,conv,leads,sales,rev,saleRev]
+  }
+
+  // ── layout ───────────────────────────────────────────────────────────────
+  app.innerHTML = `
+    <header>
+      <div class="hrow">
+        <div class="brand"><div class="logo">K</div>
+          <div><h1>Keitaro · Pulse</h1><div class="sub">Локальна аналітика трафіку по днях</div></div></div>
+        <div class="seg tm" id="teamSeg" style="display:none"></div>
+        <div class="seg" id="rangeSeg">
+          <button data-m="all">Весь період</button><button data-m="90">90 дн</button>
+          <button data-m="30">30 дн</button><button data-m="7">7 дн</button>
+        </div>
+        <select class="day" id="daySel"></select>
+        <div class="meta"><div>історія: <b>${D.range.from}</b> → <b>${D.range.to}</b></div>
+          <div>оновлено: <b>${D.generated}</b></div></div>
+      </div>
+      <div class="hrow">
+        <span class="flabel">Фільтр</span>
+        <div class="seg" id="fType"><button data-t="site">Сайт</button><button data-t="brand">Бренд</button></div>
+        <div class="seg alt" id="fMatch"><button data-x="partial">Частковий</button><button data-x="exact">Точний</button></div>
+        <input class="fq" id="fq" placeholder="почни вводити назву сайту або бренду…" autocomplete="off">
+        <div id="fchip"></div>
+      </div>
+    </header>
+    <main>
+      <div class="kpis" id="kpis"></div>
+
+      <div class="grid g3">
+        <div class="panel">
+          <div class="phead">
+            <div><h2 id="chartTitle">Трафік по днях</h2><div class="psub">Кліки (площа) та конверсії (лінія)</div></div>
+            <div class="legend"><span><i style="background:var(--blue)"></i>Кліки</span><span><i style="background:var(--gold)"></i>Конверсії</span></div>
+          </div>
+          <div class="chart-wrap" id="chartWrap"></div>
+        </div>
+        <div class="panel">
+          <div class="phead"><div><h2>Гео</h2><div class="psub" id="geoSub">Розподіл кліків по країнах</div></div></div>
+          <div class="dist" id="geoDist"></div>
+        </div>
+      </div>
+
+      <div class="grid g2">
+        <div class="panel">
+          <div class="phead">
+            <div><h2>Сайти / кампанії</h2><div class="psub" id="siteSub"></div></div>
+            <div class="tools"><span id="siteTag"></span><input class="search" id="siteSearch" placeholder="в таблиці…"></div>
+          </div>
+          <div class="tbl-wrap"><table id="siteTbl"></table></div>
+          <div class="hint">клік по рядку → фільтр на цей сайт</div>
+        </div>
+        <div class="panel">
+          <div class="phead">
+            <div><h2>Бренди / офери</h2><div class="psub" id="brandSub"></div></div>
+            <div class="tools"><span id="brandTag"></span><input class="search" id="brandSearch" placeholder="в таблиці…"></div>
+          </div>
+          <div class="tbl-wrap"><table id="brandTbl"></table></div>
+          <div class="hint">клік по рядку → фільтр на цей бренд</div>
+        </div>
+      </div>
+
+      <div class="grid g2">
+        <div class="panel">
+          <div class="phead"><div><h2>Сторінки (sub_id_3)</h2><div class="psub" id="pageSub">З яких сторінок ішли кліки</div></div><span class="tag-all">весь період</span></div>
+          <div class="dist" id="pageDist"></div>
+          <div class="hint">клік по сторінці → бренди на її позиціях →</div>
+        </div>
+        <div class="panel">
+          <div class="phead"><div><h2 id="posTitle">Позиції × бренди</h2><div class="psub" id="posSub">Який бренд на якій позиції</div></div><span class="tag-all">весь період</span></div>
+          <div class="tbl-wrap" style="max-height:430px"><table id="posTbl"></table></div>
+          <div class="hint">клік по рядку → фільтр на цей бренд</div>
+        </div>
+      </div>
+
+      <div class="grid g2">
+        <div class="panel">
+          <div class="phead"><div><h2>💰 Сайти з конверсіями</h2><div class="psub">Хто реально конвертить у вибраному періоді/фільтрі</div></div></div>
+          <div class="tbl-wrap"><table id="convTbl"></table></div>
+        </div>
+        <div class="panel">
+          <div class="phead"><div><h2>Мережі (префікс) та ОС</h2><div class="psub">Групування за префіксом кампанії й ОС</div></div></div>
+          <div class="dist" id="prefDist"></div>
+          <div class="hint" style="margin:8px 0 14px">клік по мережі → фільтр на її сайти</div>
+          <div class="dist" id="osDist"></div>
+        </div>
+      </div>
+
+      <div class="foot">Keitaro · Pulse — згенеровано локально з report/build · ${N} днів історії · ${D.rel.length} звʼязок бренд↔сайт↔сторінка</div>
+    </main>`;
+
+  // ── controls ───────────────────────────────────────────────────────────────
+  const daySel=document.getElementById("daySel");
+  daySel.innerHTML=`<option value="">— конкретний день —</option>`+D.days.slice().reverse().map((d,i)=>`<option value="${N-1-i}">${d}</option>`).join("");
+  daySel.addEventListener("change",e=>{ const v=e.target.value; if(v===""){state.mode="all";}else{state.mode="day";state.dayIdx=+v;} syncSeg(); render(); });
+
+  const seg=document.getElementById("rangeSeg");
+  seg.addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b)return; state.mode=b.dataset.m; daySel.value=""; syncSeg(); render(); });
+  function syncSeg(){ [...seg.children].forEach(b=>b.classList.toggle("on",b.dataset.m===state.mode)); }
+
+  // перемикач команд (показуємо лише коли команд >1)
+  const teamSeg=document.getElementById("teamSeg");
+  function syncTeam(){ [...teamSeg.children].forEach(b=>b.classList.toggle("on",+b.dataset.tm===state.team)); }
+  if(nTeams>1){
+    teamSeg.style.display="inline-flex";
+    teamSeg.innerHTML=`<button data-tm="-1">Всі команди</button>`+D.teams.map((t,i)=>`<button data-tm="${i}">${esc(t)}</button>`).join("");
+    teamSeg.addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b)return; state.team=+b.dataset.tm; state.selectedPage=null; syncTeam(); computeFilter(); render(); });
+  }
+
+  const fType=document.getElementById("fType"), fMatch=document.getElementById("fMatch"), fq=document.getElementById("fq");
+  function syncFilterUI(){
+    [...fType.children].forEach(b=>b.classList.toggle("on",b.dataset.t===state.filter.type));
+    [...fMatch.children].forEach(b=>b.classList.toggle("on",b.dataset.x===state.filter.match));
+  }
+  fType.addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b)return; state.filter.type=b.dataset.t; syncFilterUI(); applyFilter(); });
+  fMatch.addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b)return; state.filter.match=b.dataset.x; syncFilterUI(); applyFilter(); });
+  let fqTimer=null;
+  fq.addEventListener("input",e=>{ state.filter.q=e.target.value; clearTimeout(fqTimer); fqTimer=setTimeout(applyFilter,180); });
+  function applyFilter(){ state.selectedPage=null; computeFilter(); render(); }
+  function setFilter(type,q,match){ state.filter.type=type; state.filter.match=match||"exact"; state.filter.q=q; fq.value=q; syncFilterUI(); applyFilter(); window.scrollTo({top:0,behavior:"smooth"}); }
+  function clearFilter(){ state.filter.q=""; fq.value=""; applyFilter(); }
+
+  function renderChip(){
+    const f=state.filter, el=document.getElementById("fchip");
+    if(!f.active){ el.innerHTML=""; return; }
+    const nC=f.campSet?f.campSet.size:0, nO=f.offerSet?f.offerSet.size:0;
+    const label = f.type==="site" ? "Сайт" : "Бренд";
+    el.innerHTML=`<span class="active-chip ${f.type==="brand"?"brand":""}">
+      ${label} ${f.match==="exact"?"=":"⊃"} “${esc(f.q)}”
+      <span class="cnt">${nC} сайтів · ${nO} брендів</span>
+      <span class="x" id="clearF">✕</span></span>`;
+    document.getElementById("clearF").onclick=clearFilter;
+  }
+
+  // ── KPIs ────────────────────────────────────────────────────────────────────
+  function renderKpis(){
+    const per=seriesData();
+    const cur=sumRange(per,state.fromIdx,state.toIdx);
+    const len=state.toIdx-state.fromIdx+1, pTo=state.fromIdx-1;
+    const prev = pTo>=0 ? sumRange(per,Math.max(0,pTo-len+1),pTo) : null;
+    const restrict = state.filter.active?state.filter.campSet:null;
+    const activeSites=aggCampaigns(state.fromIdx,state.toIdx,restrict).size;
+    const cr=div(cur[1],cur[0])*100;
+    const D_=(i)=>prev?cur[i]-prev[i]:0, P_=(i)=>prev?prev[i]:0;
+    const defs=[
+      {lbl:"Кліки",v:fmtInt(cur[0]),c:"var(--blue)",d:D_(0),p:P_(0)},
+      {lbl:"Конверсії",v:fmtInt(cur[1]),c:"var(--gold)",d:D_(1),p:P_(1)},
+      {lbl:"CR",v:fmtPct(cr),c:"var(--cyan)",raw:1},
+      {lbl:"Ліди",v:fmtInt(cur[2]),c:"var(--purple)",d:D_(2),p:P_(2)},
+      {lbl:"Продажі",v:fmtInt(cur[3]),c:"var(--green)",d:D_(3),p:P_(3)},
+      {lbl:"Дохід (усього)",v:fmtMoney(cur[4]),c:"var(--dim)",d:D_(4),p:P_(4),money:1,hint:"ліди+сейли, до підтвердження"},
+      {lbl:"Дохід (підтв.)",v:fmtMoney(cur[5]),c:"var(--green)",d:D_(5),p:P_(5),money:1,hint:"sale_revenue — як у Keitaro"},
+      {lbl:state.filter.active?(state.filter.type==="brand"?"Брендів у фільтрі":"Активні сайти"):"Активні сайти",
+        v:fmtInt(state.filter.active&&state.filter.type==="brand"?state.filter.offerSet.size:activeSites),c:"var(--blue)",raw:1},
+    ];
+    document.getElementById("kpis").innerHTML=defs.map(k=>{
+      let dl="";
+      if(!k.raw){
+        const pct=k.p>0?(k.d/k.p*100):(k.d>0?100:0);
+        const cls=k.d>0?"up":(k.d<0?"down":"flat"), arr=k.d>0?"▲":(k.d<0?"▼":"—");
+        dl=`<div class="dl ${cls}">${arr} ${k.d>=0?"+":""}${k.money?fmtMoney(k.d):fmtInt(k.d)} <span style="color:var(--faint);font-weight:500">(${pct>=0?"+":""}${pct.toFixed(0)}%)</span></div>`;
+      }
+      return `<div class="kpi" style="--accent:${k.c}"${k.hint?` title="${k.hint}"`:""}><div class="lbl">${k.lbl}</div><div class="val mono">${k.v}</div>${dl}</div>`;
+    }).join("");
+  }
+
+  // ── chart ────────────────────────────────────────────────────────────────────
+  function renderChart(){
+    const wrap=document.getElementById("chartWrap");
+    const per=seriesData();
+    const s=[]; for(let i=state.fromIdx;i<=state.toIdx;i++) s.push({idx:i,day:D.days[i],clicks:per[i][0],conv:per[i][1],rev:per[i][4]});
+    const W=760,H=260,PL=44,PR=44,PT=14,PB=26, iw=W-PL-PR, ih=H-PT-PB, n=s.length;
+    const maxC=Math.max(1,...s.map(d=>d.clicks)), maxV=Math.max(1,...s.map(d=>d.conv));
+    const x=i=> n<=1?PL+iw/2:PL+(i/(n-1))*iw, yC=v=>PT+ih-(v/maxC)*ih, yV=v=>PT+ih-(v/maxV)*ih;
+    let area=`M ${x(0)} ${yC(s[0].clicks)}`, line=`M ${x(0)} ${yC(s[0].clicks)}`, cl=`M ${x(0)} ${yV(s[0].conv)}`;
+    for(let i=1;i<n;i++){ area+=` L ${x(i)} ${yC(s[i].clicks)}`; line+=` L ${x(i)} ${yC(s[i].clicks)}`; cl+=` L ${x(i)} ${yV(s[i].conv)}`; }
+    area+=` L ${x(n-1)} ${PT+ih} L ${x(0)} ${PT+ih} Z`;
+    let grid="",ylab="";
+    for(let g=0;g<=4;g++){ const yy=PT+(g/4)*ih, val=maxC*(1-g/4);
+      grid+=`<line x1="${PL}" y1="${yy}" x2="${W-PR}" y2="${yy}" stroke="rgba(72,88,124,.22)" stroke-dasharray="3 3"/>`;
+      ylab+=`<text x="${PL-8}" y="${yy+3}" text-anchor="end" fill="var(--faint)" font-size="9" font-family="var(--mono)">${fmtInt(val)}</text>`; }
+    let xlab="", step=Math.max(1,Math.ceil(n/9));
+    for(let i=0;i<n;i+=step) xlab+=`<text x="${x(i)}" y="${H-8}" text-anchor="middle" fill="var(--faint)" font-size="9" font-family="var(--mono)">${shortDay(s[i].day)}</text>`;
+    let dots=""; for(let i=0;i<n;i++) if(s[i].conv>0) dots+=`<circle cx="${x(i)}" cy="${yV(s[i].conv)}" r="3" fill="var(--gold)"/>`;
+    wrap.innerHTML=`<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+      <defs><linearGradient id="ga" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="var(--blue)" stop-opacity=".45"/><stop offset="100%" stop-color="var(--blue)" stop-opacity="0"/></linearGradient></defs>
+      ${grid}${ylab}${xlab}<path d="${area}" fill="url(#ga)"/><path d="${line}" fill="none" stroke="var(--blue)" stroke-width="2"/>
+      <path d="${cl}" fill="none" stroke="var(--gold)" stroke-width="1.8"/>${dots}
+      <rect id="hit" x="${PL}" y="${PT}" width="${iw}" height="${ih}" fill="transparent"/>
+      <line id="cursor" x1="0" y1="${PT}" x2="0" y2="${PT+ih}" stroke="var(--border-hi)" stroke-width="1" style="opacity:0"/></svg><div class="tip" id="tip"></div>`;
+    const svg=wrap.querySelector("svg"),tip=wrap.querySelector("#tip"),cursor=wrap.querySelector("#cursor"),hit=wrap.querySelector("#hit");
+    hit.addEventListener("mousemove",ev=>{ const rect=svg.getBoundingClientRect(); const px=(ev.clientX-rect.left)/rect.width*W;
+      let i=Math.round((px-PL)/iw*(n-1)); i=Math.max(0,Math.min(n-1,i)); const d=s[i], cx=x(i);
+      cursor.setAttribute("x1",cx); cursor.setAttribute("x2",cx); cursor.style.opacity=1; tip.style.opacity=1;
+      tip.style.left=Math.min(rect.width-150,Math.max(0,(cx/W)*rect.width+10))+"px"; tip.style.top="6px";
+      tip.innerHTML=`<b>${d.day}</b><br><span class="k">Кліки:</span> <b class="mono">${fmtInt(d.clicks)}</b><br><span class="k">Конв:</span> <b class="mono" style="color:var(--gold)">${fmtInt(d.conv)}</b>${d.rev>0?`<br><span class="k">Дохід:</span> <b class="mono" style="color:var(--green)">${fmtMoney(d.rev)}</b>`:""}`; });
+    hit.addEventListener("mouseleave",()=>{tip.style.opacity=0;cursor.style.opacity=0;});
+    hit.addEventListener("click",ev=>{ const rect=svg.getBoundingClientRect(); const px=(ev.clientX-rect.left)/rect.width*W;
+      let i=Math.round((px-PL)/iw*(n-1)); i=Math.max(0,Math.min(n-1,i))+state.fromIdx; state.mode="day"; state.dayIdx=i; daySel.value=i; syncSeg(); render(); });
+  }
+
+  // ── sites table ──────────────────────────────────────────────────────────────
+  const sortState={site:{key:2,asc:false},brand:{key:1,asc:false}};
+  let siteFilter="",brandFilter="";
+  document.getElementById("siteSearch").addEventListener("input",e=>{siteFilter=e.target.value.toLowerCase();renderSites();});
+  document.getElementById("brandSearch").addEventListener("input",e=>{brandFilter=e.target.value.toLowerCase();renderBrands();});
+
+  function renderSites(){
+    const f=state.filter; let rows=[], whole=false;
+    if(f.active && f.type==="brand"){
+      whole=true;
+      const m=relGroup(0,1,f.offerSet); // campaign -> metrics of THIS brand
+      m.forEach((a,ci)=>{ const c=D.camps[ci]; rows.push({ci,name:c[1],prefix:c[2],geo:c[3],clicks:a[0],conv:a[1],leads:a[2],sales:a[3],rev:a[4],confRev:a[5],cr:div(a[1],a[0])*100}); });
+    }else{
+      const m=aggCampaigns(state.fromIdx,state.toIdx,f.active?f.campSet:null);
+      m.forEach((a,ci)=>{ const c=D.camps[ci]; rows.push({ci,name:c[1],prefix:c[2],geo:c[3],clicks:a[0],conv:a[1],leads:a[2],sales:a[3],rev:a[4],confRev:a[5],cr:div(a[1],a[0])*100}); });
+    }
+    if(siteFilter) rows=rows.filter(r=>r.name.toLowerCase().includes(siteFilter)||r.geo.toLowerCase().includes(siteFilter));
+    const cols=["name","geo","clicks","conv","cr","sales","rev","confRev"], head=["Сайт","Гео","Кліки","Конв","CR","Прод","Дохід","Підтв."];
+    const sk=cols[sortState.site.key];
+    rows.sort((a,b)=> sortState.site.asc?cmp(a[sk],b[sk]):cmp(b[sk],a[sk]));
+    const total=rows.length, shown=rows.slice(0,150), maxC=Math.max(1,...shown.map(r=>r.clicks));
+    document.getElementById("siteSub").textContent=`${total} сайтів · топ ${Math.min(150,total)}`;
+    document.getElementById("siteTag").innerHTML= whole?`<span class="tag-all">за весь період</span>`:"";
+    document.getElementById("siteTbl").innerHTML=
+      `<thead><tr>${head.map((h,i)=>`<th data-i="${i}" class="${sortState.site.key===i?'sorted '+(sortState.site.asc?'asc':''):''}">${h}</th>`).join("")}</tr></thead>`+
+      `<tbody>${shown.length?shown.map(r=>`<tr data-name="${esc(r.name)}">
+        <td><span class="site">${esc(r.name)}</span> ${r.prefix!=="—"?`<span class="chip">${r.prefix}</span>`:""}${(state.team<0&&nTeams>1)?`<span class="chip tm" title="${esc(D.teams[campTeam[r.ci]])}">${teamShort(campTeam[r.ci])}</span>`:""}</td>
+        <td>${r.geo!=="—"?`<span class="chip geo">${r.geo}</span>`:'<span class="zero">—</span>'}</td>
+        <td class="bar-cell mono"><span class="bar" style="width:${r.clicks/maxC*100}%"></span><span>${fmtInt(r.clicks)}</span></td>
+        <td class="mono ${r.conv>0?'conv-badge':'zero'}">${r.conv||"0"}</td>
+        <td class="mono">${r.conv>0?fmtPct(r.cr):'<span class="zero">—</span>'}</td>
+        <td class="mono ${r.sales?'':'zero'}">${r.sales||"0"}</td>
+        <td class="mono ${r.rev>0?'':'zero'}">${r.rev>0?fmtMoney(r.rev):"—"}</td>
+        <td class="mono ${r.confRev>0?'up':'zero'}">${r.confRev>0?fmtMoney(r.confRev):"—"}</td></tr>`).join(""):`<tr class="nolink"><td colspan="8" class="emptycell">Нічого не знайдено.</td></tr>`}</tbody>`;
+    const tbl=document.getElementById("siteTbl");
+    tbl.querySelectorAll("th").forEach(th=>th.onclick=()=>{const i=+th.dataset.i; if(sortState.site.key===i)sortState.site.asc=!sortState.site.asc;else{sortState.site.key=i;sortState.site.asc=false;}renderSites();});
+    tbl.querySelectorAll("tbody tr[data-name]").forEach(tr=>tr.onclick=()=>setFilter("site",tr.dataset.name));
+  }
+
+  // ── brands table ───────────────────────────────────────────────────────────────
+  function renderBrands(){
+    const f=state.filter; let rows=[], whole=false;
+    if(f.active && f.type==="site"){
+      whole=true;
+      const m=relGroup(1,0,f.campSet); // offer -> metrics within THESE sites
+      m.forEach((a,oi)=>{ rows.push({oi,name:D.offers[oi],clicks:a[0],conv:a[1],sales:a[3],rev:a[4],confRev:a[5],cr:div(a[1],a[0])*100}); });
+    }else{
+      const m=aggOffers(state.fromIdx,state.toIdx,f.active?f.offerSet:null);
+      m.forEach((a,oi)=>{ rows.push({oi,name:D.offers[oi],clicks:a[0],conv:a[1],sales:a[3],rev:a[4],confRev:a[5],cr:div(a[1],a[0])*100}); });
+    }
+    if(brandFilter) rows=rows.filter(r=>r.name.toLowerCase().includes(brandFilter));
+    const cols=["name","clicks","conv","cr","sales","rev","confRev"], head=["Бренд","Кліки","Конв","CR","Прод","Дохід","Підтв."];
+    const sk=cols[sortState.brand.key];
+    rows.sort((a,b)=> sortState.brand.asc?cmp(a[sk],b[sk]):cmp(b[sk],a[sk]));
+    const total=rows.length, shown=rows.slice(0,150), maxC=Math.max(1,...shown.map(r=>r.clicks));
+    document.getElementById("brandSub").textContent=`${total} брендів · топ ${Math.min(150,total)}`;
+    document.getElementById("brandTag").innerHTML= whole?`<span class="tag-all">за весь період</span>`:"";
+    document.getElementById("brandTbl").innerHTML=
+      `<thead><tr>${head.map((h,i)=>`<th data-i="${i}" class="${sortState.brand.key===i?'sorted '+(sortState.brand.asc?'asc':''):''}">${h}</th>`).join("")}</tr></thead>`+
+      `<tbody>${shown.length?shown.map(r=>`<tr data-name="${esc(r.name)}">
+        <td><span class="site">${esc(r.name)}</span></td>
+        <td class="bar-cell mono"><span class="bar" style="width:${r.clicks/maxC*100}%;background:var(--cyan)"></span><span>${fmtInt(r.clicks)}</span></td>
+        <td class="mono ${r.conv>0?'conv-badge':'zero'}">${r.conv||"0"}</td>
+        <td class="mono">${r.conv>0?fmtPct(r.cr):'<span class="zero">—</span>'}</td>
+        <td class="mono ${r.sales?'':'zero'}">${r.sales||"0"}</td>
+        <td class="mono ${r.rev>0?'':'zero'}">${r.rev>0?fmtMoney(r.rev):"—"}</td>
+        <td class="mono ${r.confRev>0?'up':'zero'}">${r.confRev>0?fmtMoney(r.confRev):"—"}</td></tr>`).join(""):`<tr class="nolink"><td colspan="7" class="emptycell">Нічого не знайдено.</td></tr>`}</tbody>`;
+    const tbl=document.getElementById("brandTbl");
+    tbl.querySelectorAll("th").forEach(th=>th.onclick=()=>{const i=+th.dataset.i; if(sortState.brand.key===i)sortState.brand.asc=!sortState.brand.asc;else{sortState.brand.key=i;sortState.brand.asc=false;}renderBrands();});
+    tbl.querySelectorAll("tbody tr[data-name]").forEach(tr=>tr.onclick=()=>setFilter("brand",tr.dataset.name));
+  }
+
+  // ── positions & pages (rel, whole history) ────────────────────────────────────
+  function entityForRel(){ // returns [entityCol, set] based on filter
+    const f=state.filter;
+    if(f.active && f.type==="brand") return [1,f.offerSet];
+    if(f.active && f.type==="site") return [0,f.campSet];
+    return [null,null];
+  }
+  const noteHTML = n => `<div style="font-size:11px;color:var(--faint);margin-top:8px">без мітки (sub_id): <span class="mono">${fmtInt(n)}</span> кліків</div>`;
+  const distHead = (a,b)=>`<div class="dist-head"><span>${a}</span><span>${b}</span></div>`;
+
+  function renderPosPages(){
+    const [col,set]=entityForRel();
+    const scope = state.filter.active ? (state.filter.type==="brand"?`бренд “${esc(state.filter.q)}”`:`сайт “${esc(state.filter.q)}”`) : "усі сайти/бренди";
+
+    // ── Сторінки (sub_id_3) — клікабельний список ──
+    const gm=relGroup(3,col,set);
+    let pgAll=[...gm].map(([gi,a])=>({gi,label:D.pages[gi],v:a[0],conv:a[1]}));
+    const pgEmpty=pgAll.filter(p=>p.label==="").reduce((s,p)=>s+p.v,0);
+    let pg=pgAll.filter(p=>p.label!==""&&p.v>0).sort((a,b)=>b.v-a.v).slice(0,18);
+    const maxG=Math.max(1,...pg.map(p=>p.v));
+    document.getElementById("pageSub").textContent=`Сторінки для: ${scope}`;
+    document.getElementById("pageDist").innerHTML = distHead("Сторінка","Кліки · Конв") +
+      (pg.length? pg.map(p=>`<div class="row drow ${state.selectedPage===p.gi?'sel':''}" data-page="${p.gi}">
+          <div class="name" title="${esc(p.label)}">${esc(p.label)}</div>
+          <div class="track"><div class="fill" style="width:${p.v/maxG*100}%;background:linear-gradient(90deg,var(--purple),var(--blue))"></div></div>
+          <div class="v mono">${fmtInt(p.v)}${p.conv?` · <span style="color:var(--gold)">${p.conv}</span>`:""}</div></div>`).join("") : emptyDist())
+      + (pgEmpty>0?noteHTML(pgEmpty):"");
+    document.getElementById("pageDist").querySelectorAll("[data-page]").forEach(el=>el.onclick=()=>{
+      const gi=+el.dataset.page; state.selectedPage=(state.selectedPage===gi?null:gi); renderPosPages();
+    });
+
+    // ── Позиції × бренди — таблиця (scope: фільтр + вибрана сторінка) ──
+    const sp=state.selectedPage;
+    const posTitle=document.getElementById("posTitle"), posSub=document.getElementById("posSub");
+    if(sp!=null){
+      posTitle.innerHTML=`Позиції × бренди · <span style="color:var(--purple)">${esc(D.pages[sp]||"(без сторінки)")}</span> <span id="clrPage" title="скинути сторінку" style="cursor:pointer;color:var(--dim);font-weight:500">✕</span>`;
+      posSub.textContent="Які бренди й на яких позиціях стояли на цій сторінці";
+    } else {
+      posTitle.textContent="Позиції × бренди";
+      posSub.textContent=`Який бренд на якій позиції · ${scope}`;
+    }
+    const m=new Map();
+    for(const r of D.rel){
+      if(set && !set.has(r[col])) continue;
+      if(!teamOK(campTeam[r[0]])) continue;
+      if(sp!=null && r[3]!==sp) continue;
+      const key=r[2]+"|"+r[1];
+      let a=m.get(key); if(!a){a={pos:D.positions[r[2]],offer:D.offers[r[1]],clicks:0,conv:0};m.set(key,a);}
+      a.clicks+=r[4]; a.conv+=r[5];
+    }
+    let rows=[...m.values()].filter(r=>r.clicks>0);
+    rows.sort((a,b)=>{ const ea=a.pos==="",eb=b.pos===""; if(ea!==eb)return ea?1:-1; const na=+a.pos,nb=+b.pos; if(!isNaN(na)&&!isNaN(nb)&&na!==nb)return na-nb; return b.clicks-a.clicks; });
+    rows=rows.slice(0,80);
+    const maxc=Math.max(1,...rows.map(r=>r.clicks));
+    document.getElementById("posTbl").innerHTML =
+      `<thead><tr><th>Поз.</th><th>Бренд</th><th>Кліки</th><th>Конв</th></tr></thead>`+
+      `<tbody>${rows.length? rows.map(r=>`<tr data-name="${esc(r.offer)}">
+         <td class="mono" style="font-weight:700;color:var(--gold)">${r.pos===""?"—":esc(r.pos)}</td>
+         <td><span class="site">${esc(r.offer)}</span></td>
+         <td class="bar-cell mono"><span class="bar" style="width:${r.clicks/maxc*100}%;background:var(--gold)"></span><span>${fmtInt(r.clicks)}</span></td>
+         <td class="mono ${r.conv>0?'conv-badge':'zero'}">${r.conv||"0"}</td></tr>`).join("") : `<tr class="nolink"><td colspan="4" class="emptycell">Немає позицій із мітками для цього зрізу.</td></tr>`}</tbody>`;
+    document.getElementById("posTbl").querySelectorAll("tbody tr[data-name]").forEach(tr=>tr.onclick=()=>setFilter("brand",tr.dataset.name));
+    if(sp!=null){ const c=document.getElementById("clrPage"); if(c) c.onclick=e=>{ e.stopPropagation(); state.selectedPage=null; renderPosPages(); }; }
+  }
+  function distHTML(items,colorFn){
+    const max=Math.max(1,...items.map(i=>i.v));
+    return items.map(i=>`<div class="row"><div class="name" title="${esc(i.label||i.name)}">${esc(i.label||i.name)}</div>
+      <div class="track"><div class="fill" style="width:${i.v/max*100}%;${colorFn?'background:'+colorFn(i):''}"></div></div>
+      <div class="v mono">${fmtInt(i.v)}${i.conv?` · <span style="color:var(--gold)">${i.conv}</span>`:""}</div></div>`).join("");
+  }
+  const emptyDist=()=>'<div style="color:var(--faint);font-size:12px">немає даних</div>';
+
+  // ── converting sites ────────────────────────────────────────────────────────────
+  function renderConv(){
+    const f=state.filter; let rows=[];
+    if(f.active && f.type==="brand"){
+      const m=relGroup(0,1,f.offerSet);
+      m.forEach((a,ci)=>{ if(a[1]>0){const c=D.camps[ci]; rows.push({name:c[1],geo:c[3],clicks:a[0],conv:a[1],sales:a[3],rev:a[4],confRev:a[5],cr:div(a[1],a[0])*100});} });
+    }else{
+      const m=aggCampaigns(state.fromIdx,state.toIdx,f.active?f.campSet:null);
+      m.forEach((a,ci)=>{ if(a[1]>0){const c=D.camps[ci]; rows.push({name:c[1],geo:c[3],clicks:a[0],conv:a[1],sales:a[3],rev:a[4],confRev:a[5],cr:div(a[1],a[0])*100});} });
+    }
+    rows.sort((a,b)=>b.conv-a.conv||b.confRev-a.confRev);
+    const el=document.getElementById("convTbl");
+    if(!rows.length){ el.innerHTML=`<tbody><tr class="nolink"><td class="emptycell">За вибраний період/фільтр конверсій немає.</td></tr></tbody>`; return; }
+    el.innerHTML=`<thead><tr><th>Сайт</th><th>Гео</th><th>Конв</th><th>Прод</th><th>CR</th><th>Кліки</th><th>Дохід✓</th></tr></thead>
+      <tbody>${rows.slice(0,80).map(r=>`<tr data-name="${esc(r.name)}">
+        <td><span class="site">${esc(r.name)}</span></td>
+        <td>${r.geo!=="—"?`<span class="chip geo">${r.geo}</span>`:'<span class="zero">—</span>'}</td>
+        <td class="mono conv-badge">${r.conv}</td><td class="mono ${r.sales?'':'zero'}">${r.sales||"0"}</td>
+        <td class="mono">${fmtPct(r.cr)}</td><td class="mono">${fmtInt(r.clicks)}</td>
+        <td class="mono ${r.confRev>0?'up':'zero'}">${r.confRev>0?fmtMoney(r.confRev):"—"}</td></tr>`).join("")}</tbody>`;
+    el.querySelectorAll("tbody tr[data-name]").forEach(tr=>tr.onclick=()=>setFilter("site",tr.dataset.name));
+  }
+
+  // ── geo / prefix / os ─────────────────────────────────────────────────────────
+  function renderGeo(){
+    const f=state.filter; const byGeo=new Map();
+    if(f.active && f.type==="brand"){
+      const m=relGroup(0,1,f.offerSet); // campaign -> brand metrics
+      m.forEach((a,ci)=>{ const g=D.camps[ci][3]; const c=byGeo.get(g)||[0,0]; c[0]+=a[0];c[1]+=a[1];byGeo.set(g,c); });
+      document.getElementById("geoSub").textContent="по сайтах бренду · весь період";
+    }else{
+      const m=aggCampaigns(state.fromIdx,state.toIdx,f.active?f.campSet:null);
+      m.forEach((a,ci)=>{ const g=D.camps[ci][3]; const c=byGeo.get(g)||[0,0]; c[0]+=a[0];c[1]+=a[1];byGeo.set(g,c); });
+      document.getElementById("geoSub").textContent="розподіл кліків по країнах";
+    }
+    let items=[...byGeo].filter(([g])=>g!=="—").map(([g,v])=>({label:g,v:v[0],conv:v[1]})).sort((a,b)=>b.v-a.v).slice(0,10);
+    document.getElementById("geoDist").innerHTML= distHead("Країна","Кліки · Конв")+(items.length?distHTML(items):emptyDist());
+  }
+  function renderPrefOs(){
+    const f=state.filter; const byP=new Map();
+    if(f.active && f.type==="brand"){
+      const m=relGroup(0,1,f.offerSet);
+      m.forEach((a,ci)=>{ const p=D.camps[ci][2]; const c=byP.get(p)||[0,0]; c[0]+=a[0];c[1]+=a[1];byP.set(p,c); });
+    }else{
+      const m=aggCampaigns(state.fromIdx,state.toIdx,f.active?f.campSet:null);
+      m.forEach((a,ci)=>{ const p=D.camps[ci][2]; const c=byP.get(p)||[0,0]; c[0]+=a[0];c[1]+=a[1];byP.set(p,c); });
+    }
+    let items=[...byP].filter(([p])=>p!=="—").map(([p,v])=>({label:p,v:v[0],conv:v[1]})).sort((a,b)=>b.v-a.v);
+    const maxP=Math.max(1,...items.map(i=>i.v));
+    const prefEl=document.getElementById("prefDist");
+    prefEl.innerHTML=`<div class="sublabel">Мережі (префікс) · ${items.length}</div>`+distHead("Мережа","Кліки · Конв")+
+      (items.length? items.map(i=>`<div class="row drow" data-prefix="${esc(i.label)}">
+          <div class="name" title="${esc(i.label)}">${esc(i.label)}</div>
+          <div class="track"><div class="fill" style="width:${i.v/maxP*100}%;background:linear-gradient(90deg,var(--purple),var(--blue))"></div></div>
+          <div class="v mono">${fmtInt(i.v)}${i.conv?` · <span style="color:var(--gold)">${i.conv}</span>`:""}</div></div>`).join("") : emptyDist());
+    prefEl.querySelectorAll("[data-prefix]").forEach(el=>el.onclick=()=>setFilter("site",el.dataset.prefix,"partial"));
+    // ОС — по командах (весь період). При активному фільтрі сутності не розкладається.
+    const osEl=document.getElementById("osDist");
+    if(f.active){ osEl.innerHTML=`<div class="sublabel">ОС</div><div style="color:var(--faint);font-size:12px">ОС доступна лише без фільтра сайту/бренду</div>`; return; }
+    let osArr;
+    if(state.team<0){ const mm=new Map(); (D.os||[]).forEach(arr=>arr.forEach(o=>{ const c=mm.get(o[0])||[0,0]; c[0]+=o[1];c[1]+=o[2]; mm.set(o[0],c); }));
+      osArr=[...mm].map(([k,v])=>({label:k,v:v[0],conv:v[1]})).sort((a,b)=>b.v-a.v); }
+    else { osArr=((D.os&&D.os[state.team])||[]).map(o=>({label:o[0],v:o[1],conv:o[2]})); }
+    osArr=osArr.slice(0,6);
+    osEl.innerHTML=`<div class="sublabel">ОС · ${state.team<0?"усі команди":esc(D.teams[state.team])}</div>`+distHead("ОС","Кліки · Конв")+(osArr.length?distHTML(osArr,()=>"linear-gradient(90deg,var(--green),var(--cyan))"):emptyDist());
+  }
+
+  // ── render all ────────────────────────────────────────────────────────────────
+  function render(){
+    setRange(); renderChip();
+    const f=state.filter;
+    const scopeTxt = f.active ? ` · ${f.type==="brand"?"бренд":"сайт"} “${esc(f.q)}”` : "";
+    const rangeTxt = state.mode==="day"?`день ${D.days[state.dayIdx]}`:state.mode==="all"?"весь період":`останні ${state.mode} дн`;
+    document.getElementById("chartTitle").textContent=`Трафік · ${rangeTxt}${scopeTxt}`;
+    renderKpis(); renderChart(); renderSites(); renderBrands(); renderPosPages(); renderConv(); renderGeo(); renderPrefOs();
+  }
+
+  // початковий стан з URL: #brand:назва / #site:назва / #page:сторінка (можна через ;)
+  (function initFromHash(){
+    const h=decodeURIComponent(location.hash.replace(/^#/,""));
+    h.split(";").forEach(part=>{
+      const m=part.match(/^(site|brand|page):(.+)$/);
+      if(!m) return;
+      if(m[1]==="page"){ const gi=D.pages.indexOf(m[2]); if(gi>=0) state.selectedPage=gi; }
+      else { state.filter.type=m[1]; state.filter.match="partial"; state.filter.q=m[2]; fq.value=m[2]; }
+    });
+    const tm=h.match(/(?:^|;)team:(\d+)/); if(tm){ const t=+tm[1]; if(t>=0&&t<nTeams) state.team=t; }
+    if(state.filter.q) computeFilter();
+  })();
+
+  syncSeg(); syncFilterUI(); syncTeam(); render();
+}
+</script>
+<script>
+// ── bootstrap: plaintext (локально) / пароль + AES-GCM (онлайн) ───────────────
+(async function(){
+  const app = document.getElementById("app");
+
+  // Локальний режим: дані вшиті напряму
+  if (window.KT_DATA){ KT_boot(window.KT_DATA); return; }
+
+  const enc = window.KT_ENC;
+  if (!enc){
+    app.innerHTML = `<div class="empty">
+      <h1>📊 Дашборд ще не наповнено даними</h1>
+      <p>Це шаблон. Щоб завантажити історію з Keitaro, запусти в цій папці:</p>
+      <p><code>node fetch.mjs</code></p></div>`;
+    return;
+  }
+
+  const KDF = window.KT_KDF || { iter: 200000 };
+  const b64ToBytes = (b64)=>{ const bin=atob(b64); const u=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) u[i]=bin.charCodeAt(i); return u; };
+
+  async function decrypt(password){
+    const raw = b64ToBytes(enc);
+    const salt = raw.slice(0,16), iv = raw.slice(16,28), ct = raw.slice(28);
+    const keyMat = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveKey"]);
+    const key = await crypto.subtle.deriveKey(
+      { name:"PBKDF2", salt, iterations:KDF.iter, hash:"SHA-256" },
+      keyMat, { name:"AES-GCM", length:256 }, false, ["decrypt"]);
+    const plain = await crypto.subtle.decrypt({ name:"AES-GCM", iv }, key, ct);
+    return JSON.parse(new TextDecoder().decode(plain));
+  }
+
+  function loginScreen(msg){
+    app.innerHTML = `<div class="empty">
+      <h1>🔒 Keitaro · Pulse</h1>
+      <p>Введи пароль, щоб відкрити звіт.</p>
+      <form id="lf" style="display:flex;gap:10px;justify-content:center;margin-top:18px;flex-wrap:wrap">
+        <input id="lp" type="password" autocomplete="current-password" placeholder="пароль"
+          style="background:var(--bg2);border:1px solid var(--border);color:var(--fg);font:inherit;font-size:15px;padding:11px 15px;border-radius:10px;min-width:240px">
+        <button type="submit"
+          style="background:linear-gradient(135deg,var(--blue),#3a7fe0);color:#08101f;border:0;font:inherit;font-weight:700;font-size:15px;padding:11px 22px;border-radius:10px;cursor:pointer">Увійти</button>
+      </form>
+      <div id="lerr" style="color:var(--red);font-size:13px;margin-top:14px;min-height:18px">${msg||""}</div></div>`;
+    const form=document.getElementById("lf"), inp=document.getElementById("lp");
+    inp.focus();
+    form.addEventListener("submit", async (e)=>{
+      e.preventDefault();
+      const btn=form.querySelector("button"); btn.disabled=true; btn.textContent="Розшифровую…";
+      try{
+        const D = await decrypt(inp.value);
+        try{ sessionStorage.setItem("kt_pw", inp.value); }catch(_){}
+        KT_boot(D);
+      }catch(err){
+        loginScreen("Невірний пароль. Спробуй ще раз.");
+      }
+    });
+  }
+
+  // авто-вхід у межах вкладки (пароль зберігається лише в sessionStorage)
+  let saved=null; try{ saved=sessionStorage.getItem("kt_pw"); }catch(_){}
+  if (saved){
+    try{ KT_boot(await decrypt(saved)); return; }
+    catch(_){ try{ sessionStorage.removeItem("kt_pw"); }catch(__){} }
+  }
+  loginScreen("");
+})();
+</script>
+</body>
+</html>
