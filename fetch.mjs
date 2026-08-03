@@ -59,6 +59,14 @@ async function encryptData(jsonStr, password) {
   return { b64: Buffer.from(out).toString("base64"), iter };
 }
 const log = (...a) => console.log("•", ...a);
+// У CI логи публічні → ховаємо адреси/хости з будь-якого тексту (напр. повідомлень помилок)
+let SECRET_HOSTS = [];
+const redact = (s) => {
+  if (!process.env.CI) return String(s);
+  let out = String(s).replace(/https?:\/\/[^\s/)"']+/gi, "http://***").replace(/\b\d{1,3}(\.\d{1,3}){3}\b/g, "***");
+  for (const h of SECRET_HOSTS) if (h) out = out.split(h).join("***");
+  return out;
+};
 const num = (v) => { const n = Number(v); return isNaN(n) ? 0 : n; };
 const money = (v) => Math.round(num(v) * 100) / 100;
 
@@ -125,6 +133,7 @@ function makeClient(url, key) {
 async function main() {
   const t0 = Date.now();
   const { teams: TEAMS, password: PASSWORD } = await loadConfig();
+  SECRET_HOSTS = TEAMS.map((t) => { try { return new URL(t.url).hostname; } catch { return ""; } }).filter(Boolean);
   const fmtDayTz = (d) => d.toLocaleDateString("en-CA", { timeZone: TZ }); // YYYY-MM-DD у TZ
   const now = new Date();
   const yst = new Date(now); yst.setDate(yst.getDate() - 1);
@@ -136,11 +145,12 @@ async function main() {
   const raw = [];
   for (let ti = 0; ti < TEAMS.length; ti++) {
     const T = TEAMS[ti];
-    log(`[${T.name}] ${T.url}`);
+    // У CI (публічні логи) НЕ друкуємо адресу сервера — лише назву команди.
+    log(process.env.CI ? `[${T.name}]` : `[${T.name}] ${T.url}`);
     const cl = makeClient(T.url, T.key);
     let dayRows;
     try { dayRows = await cl.report(["day"], searchFrom, toDay, [...METRICS, "cost"]); }
-    catch (e) { log(`  ✖ пропускаю команду (${e.message})`); raw.push(null); continue; }
+    catch (e) { log(`  ✖ пропускаю команду (${redact(e.message)})`); raw.push(null); continue; }
     if (!dayRows.length) { log("  (немає даних у діапазоні)"); raw.push({ dayRows: [], cdRaw: [], odRaw: [], relRaw: [], osRaw: [], nameById: new Map() }); continue; }
     const tDays = [...new Set(dayRows.map((r) => r.day))].sort();
     const from = tDays[0], to = tDays[tDays.length - 1];
@@ -249,4 +259,4 @@ async function main() {
   log(`Готово за ${((Date.now() - t0) / 1000).toFixed(1)}s → ${outPath} (${mb} MB)`);
 }
 
-main().catch((e) => { console.error("✖", e.message); process.exit(1); });
+main().catch((e) => { console.error("✖", redact(e.message)); process.exit(1); });
