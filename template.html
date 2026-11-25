@@ -9,8 +9,18 @@
     --bg:#0e131f; --bg2:#131a29;
     --panel:rgba(24,31,46,.72); --panel-solid:#181f2e; --elev:#212a3e;
     --border:rgba(72,88,124,.32); --border-hi:rgba(79,157,255,.45);
-    --fg:#e9edf6; --dim:#98a3ba; --faint:#5f6b83;
+    --fg:#e9edf6; --dim:#98a3ba; --faint:#7c879e;
     --blue:#4f9dff; --cyan:#38d6e0; --green:#48d597; --gold:#f4b73d; --red:#f2565b; --purple:#b578f0;
+    /* Категорійні слоти = ідентичність (команда). Порядок фіксований і ніколи
+       не крутиться по колу; колір закріплений за командою, а не за її місцем у
+       рейтингу. Набір прогнаний валідатором на цьому ж фоні: всі шість у смузі
+       світлості для темної теми, найгірша сусідня пара ΔE 11.1 (protan),
+       10.7 (tritan), контраст до фону ≥3:1. */
+    --s1:#338ced; --s2:#e76624; --s3:#00a888; --s4:#d28e05; --s5:#e24d8b; --s6:#9887ef;
+    /* Статус = лише стан, ніколи як серія. Завжди зі стрілкою/словом поруч,
+       щоб сенс не тримався на самому кольорі. */
+    --good:#0aac23; --good-ink:#53c556; --warn:#fbb315; --crit:#dc3c3d; --crit-ink:#f2565b;
+    --grid:rgba(120,140,180,.16); --axis:rgba(120,140,180,.32);
     --mono:ui-monospace,"JetBrains Mono","Cascadia Code",Consolas,monospace;
     --radius:14px;
   }
@@ -54,8 +64,9 @@
   .seg button:hover{color:var(--fg)}
   .seg button.on{background:linear-gradient(135deg,var(--blue),#3a7fe0);color:#08101f;box-shadow:0 2px 10px rgba(79,157,255,.35)}
   .seg.alt button.on{background:linear-gradient(135deg,var(--purple),#8a5be0)}
-  .seg.tm button.on{background:linear-gradient(135deg,var(--green),#2fae76);color:#08130d}
-  .chip.tm{background:rgba(72,213,151,.13);color:var(--green);border-color:rgba(72,213,151,.28)}
+  .seg.tm button.on{background:linear-gradient(135deg,var(--s1),#2a6fc4);color:#eaf3ff}
+  .chip.tm{background:color-mix(in srgb,var(--hue,var(--s1)) 15%,transparent);color:var(--hue,var(--s1));
+    border-color:color-mix(in srgb,var(--hue,var(--s1)) 34%,transparent)}
   select.day{background:var(--panel-solid);border:1px solid var(--border);color:var(--fg);font:inherit;font-size:12.5px;
     padding:7px 11px;border-radius:9px;cursor:pointer}
   select.day:focus{outline:none;border-color:var(--border-hi)}
@@ -82,7 +93,7 @@
   .kpi .lbl{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.6px;font-weight:600}
   .kpi .val{font-size:26px;font-weight:700;margin-top:7px;line-height:1}
   .kpi .dl{font-size:11.5px;margin-top:7px;font-weight:600;display:flex;align-items:center;gap:5px}
-  .up{color:var(--green)} .down{color:var(--red)} .flat{color:var(--faint)}
+  .up{color:var(--good-ink)} .down{color:var(--crit-ink)} .flat{color:var(--faint)}
 
   .grid{display:grid;gap:16px;margin-bottom:16px}
   .g2{grid-template-columns:1fr 1fr}
@@ -114,7 +125,7 @@
   .chip{display:inline-block;font-size:10.5px;padding:1px 7px;border-radius:20px;font-weight:600;
     background:rgba(79,157,255,.14);color:var(--blue);border:1px solid rgba(79,157,255,.25)}
   .chip.geo{background:rgba(56,214,224,.13);color:var(--cyan);border-color:rgba(56,214,224,.25)}
-  .conv-badge{color:var(--gold);font-weight:700}
+  .conv-badge{color:var(--s2);font-weight:700}
   .zero{color:var(--faint)}
   .bar-cell{position:relative}
   .bar-cell .bar{position:absolute;left:0;top:50%;transform:translateY(-50%);height:60%;border-radius:3px;opacity:.16;background:var(--blue);z-index:0}
@@ -125,7 +136,7 @@
   .dist .row{display:flex;align-items:center;gap:11px}
   .dist .name{width:130px;font-size:12px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0}
   .dist .track{flex:1;height:8px;background:var(--bg2);border-radius:5px;overflow:hidden}
-  .dist .fill{height:100%;border-radius:5px;background:linear-gradient(90deg,var(--blue),var(--cyan))}
+  .dist .fill{height:100%;border-radius:5px;background:var(--s1)}
   .dist .v{width:92px;text-align:right;font-size:12px;color:var(--dim)}
   .dist-head{display:flex;justify-content:space-between;font-size:10px;color:var(--faint);text-transform:uppercase;
     letter-spacing:.5px;font-weight:700;padding-bottom:7px;margin-bottom:3px;border-bottom:1px solid var(--border)}
@@ -184,12 +195,67 @@
   .mvs{font-size:10.5px;color:var(--faint);grid-column:1/3;display:flex;gap:7px;align-items:center;flex-wrap:wrap;font-family:var(--mono)}
   .badge{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;padding:1px 6px;border-radius:5px;
     background:var(--bg2);color:var(--dim);border:1px solid var(--border);font-family:inherit}
-  .badge.new{color:var(--green);border-color:rgba(72,213,151,.32);background:rgba(72,213,151,.1)}
-  .badge.dead{color:var(--red);border-color:rgba(242,86,91,.32);background:rgba(242,86,91,.1)}
-  .badge.warn{color:var(--gold);border-color:rgba(244,183,61,.32);background:rgba(244,183,61,.1)}
+  .badge.new{color:var(--good-ink);border-color:rgba(83,197,86,.34);background:rgba(83,197,86,.1)}
+  .badge.dead{color:var(--crit-ink);border-color:rgba(242,86,91,.32);background:rgba(242,86,91,.1)}
+  .badge.warn{color:var(--warn);border-color:rgba(251,179,21,.32);background:rgba(251,179,21,.1)}
   .mvempty{font-size:12px;color:var(--faint);padding:12px 2px}
+  /* ── головний блок ─────────────────────────────────────────────────────── */
+  .lead{display:grid;grid-template-columns:1.15fr 2fr;gap:16px;margin-bottom:13px}
+  @media(max-width:1050px){.lead{grid-template-columns:1fr}}
+  .hero{background:var(--panel);backdrop-filter:blur(10px);border:1px solid var(--border);border-radius:var(--radius);
+    padding:17px 19px 9px;display:flex;flex-direction:column;justify-content:space-between;position:relative;overflow:hidden}
+  .hlbl{font-size:11px;text-transform:uppercase;letter-spacing:.7px;color:var(--dim);font-weight:700}
+  .hrange{color:var(--faint);font-weight:600;text-transform:none;letter-spacing:0;margin-left:7px}
+  /* герой-число — тим самим шрифтом, пропорційні цифри: tabular на такому
+     кеглі робить число «дірявим» */
+  .hval{font-size:46px;font-weight:700;line-height:1.05;margin-top:9px;letter-spacing:-1.2px}
+  .hdl{font-size:12.5px;font-weight:700;margin-top:9px;display:flex;align-items:baseline;gap:7px;flex-wrap:wrap}
+  .hdl .sub,.dl .sub{color:var(--faint);font-weight:500}
+  .hspark{margin:10px -19px -9px;opacity:.85}
+  .hspark .spark{height:56px}
+  .tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  .tiles .kpi{display:flex;flex-direction:column;justify-content:center}
+  @media(max-width:700px){.tiles{grid-template-columns:1fr}}
+  .morekpi{display:flex;gap:20px;flex-wrap:wrap;font-size:12px;color:var(--dim);margin-bottom:16px;
+    padding:10px 16px;border:1px solid var(--border);border-radius:11px;background:rgba(19,26,41,.45)}
+  .morekpi b{color:var(--fg);font-family:var(--mono);font-weight:700;margin-left:3px}
+
+  /* ── список команд ─────────────────────────────────────────────────────── */
+  .tlist{display:flex;flex-direction:column;gap:1px}
+  .thead,.trow{display:grid;grid-template-columns:1.5fr 2fr .9fr 1fr .9fr .8fr 1.1fr 96px;gap:13px;align-items:center}
+  .thead{font-size:9.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--faint);font-weight:700;
+    padding:0 9px 8px;margin-bottom:3px;border-bottom:1px solid var(--border)}
+  .thead span:not(:first-child){text-align:right}
+  .thead span:nth-child(2){text-align:left}
+  .trow{padding:9px;border-radius:9px;cursor:pointer;transition:background .12s}
+  .trow:hover{background:rgba(79,157,255,.08)}
+  .trow.on{background:color-mix(in srgb,var(--hue) 12%,transparent);box-shadow:inset 2px 0 0 var(--hue)}
+  .tname{display:flex;align-items:center;gap:9px;font-size:13px;font-weight:600;overflow:hidden;white-space:nowrap}
+  .tdot{width:9px;height:9px;border-radius:3px;flex-shrink:0;background:var(--hue)}
+  .tbar{height:9px;background:var(--bg2);border-radius:5px;overflow:hidden}
+  .tbar i{display:block;height:100%;border-radius:5px;background:var(--hue)}
+  .tnum{font-family:var(--mono);font-size:12.5px;font-weight:600;text-align:right;font-variant-numeric:tabular-nums}
+  .tsp{height:28px}
+  .tsp .spark{height:28px}
+  @media(max-width:1050px){
+    .thead,.trow{grid-template-columns:1.4fr 1fr 1fr}
+    .tbar,.tsp,.tcr,.trev,.thead span:nth-child(2),.thead span:nth-child(6),
+    .thead span:nth-child(7),.thead span:nth-child(8){display:none}
+  }
+
+  /* ── шухляда з другорядними блоками ────────────────────────────────────── */
+  .drawer{border:1px solid var(--border);border-radius:var(--radius);background:rgba(19,26,41,.4);margin-bottom:16px}
+  .drawer>summary{cursor:pointer;padding:14px 18px;font-size:12.5px;font-weight:700;color:var(--dim);
+    list-style:none;display:flex;align-items:center;gap:9px;user-select:none}
+  .drawer>summary::-webkit-details-marker{display:none}
+  .drawer>summary::before{content:"▸";color:var(--faint);font-size:11px}
+  .drawer[open]>summary::before{content:"▾"}
+  .drawer>summary:hover{color:var(--fg)}
+  .drawer .inner{padding:0 14px 6px}
+  .drawer .grid{margin-bottom:14px}
+
   .caret{color:var(--faint);font-size:10px;display:inline-block;width:10px}
-  .ok{color:var(--green);font-weight:700}
+  .ok{color:var(--good-ink);font-weight:700}
   tr.netrow{cursor:pointer}
   tr.suboff td{background:rgba(10,14,24,.45);font-size:12px;color:var(--dim);border-bottom-color:rgba(72,88,124,.16)}
 </style>
@@ -221,6 +287,13 @@ function KT_boot(D){
     const w=(n.trim().split(/\s+/)[0]||n);
     return w.length<=10 ? w : w.slice(0,9)+"…";
   };
+
+  // Колір закріплений за командою (ідентичність), а не за її місцем у рейтингу:
+  // після фільтра «вцілілі» не перефарбовуються. Понад шість команд кольором не
+  // розрізняємо — сьомий відтінок під дальтонізмом не відрізнити від наявного.
+  const TPAL=["var(--s1)","var(--s2)","var(--s3)","var(--s4)","var(--s5)","var(--s6)"];
+  const teamHue=i=> (i>=0 && i<TPAL.length) ? TPAL[i] : "var(--dim)";
+  const teamChip=i=>`<span class="chip tm" style="--hue:${teamHue(i)}" title="${esc((D.teams&&D.teams[i])||"")}">${teamShort(i)}</span>`;
 
   const campTeam = D.camps.map(c=>c[4]);   // campIdx → teamIdx
   const nTeams = (D.teams||["—"]).length;
@@ -323,15 +396,26 @@ function KT_boot(D){
     </header>
     <main>
       <div id="tabOv">
-      <div class="kpis" id="kpis"></div>
-
-      <div class="tcards" id="tcards"></div>
+      <div class="lead">
+        <div class="hero" id="hero"></div>
+        <div class="tiles" id="tiles"></div>
+      </div>
+      <div class="morekpi" id="moreKpi"></div>
 
       <div class="grid">
         <div class="panel">
           <div class="phead"><div><h2>Що змінилось</h2><div class="psub" id="dgSub"></div></div>
             <span class="tag-all">порівняння періодів</span></div>
           <ul class="digest" id="digest"></ul>
+        </div>
+      </div>
+
+      <div class="grid" id="teamBlock">
+        <div class="panel">
+          <div class="phead"><div><h2>Команди</h2><div class="psub" id="tmSub"></div></div>
+            <span class="tag-all">клік по рядку — фокус на команді</span></div>
+          <div class="thead" id="tmHead"></div>
+          <div class="tlist" id="tcards"></div>
         </div>
       </div>
 
@@ -345,17 +429,14 @@ function KT_boot(D){
         </div>
       </div>
 
-      <div class="grid g3">
+      <div class="grid">
         <div class="panel">
           <div class="phead">
-            <div><h2 id="chartTitle">Трафік по днях</h2><div class="psub">Кліки (площа) та конверсії (лінія)</div></div>
-            <div class="legend"><span><i style="background:var(--blue)"></i>Кліки</span><span><i style="background:var(--gold)"></i>Конверсії</span></div>
+            <div><h2 id="chartTitle">Трафік по днях</h2>
+              <div class="psub">Дві панелі на спільній осі часу. Шкали різні, тож висоту ліній між панелями не порівнюють — читають форму кожної окремо.</div></div>
           </div>
           <div class="chart-wrap" id="chartWrap"></div>
-        </div>
-        <div class="panel">
-          <div class="phead"><div><h2>Гео</h2><div class="psub" id="geoSub">Розподіл кліків по країнах</div></div></div>
-          <div class="dist" id="geoDist"></div>
+          <div class="hint">клік по графіку → цей день</div>
         </div>
       </div>
 
@@ -378,12 +459,23 @@ function KT_boot(D){
         </div>
       </div>
 
+      <details class="drawer" id="moreBox">
+        <summary>Ще розрізи — гео, сторінки, позиції, хто конвертить, префікси та ОС</summary>
+        <div class="inner">
+
       <div class="grid g2">
+        <div class="panel">
+          <div class="phead"><div><h2>Гео</h2><div class="psub" id="geoSub">Розподіл кліків по країнах</div></div></div>
+          <div class="dist" id="geoDist"></div>
+        </div>
         <div class="panel">
           <div class="phead"><div><h2>Сторінки (sub_id_3)</h2><div class="psub" id="pageSub">З яких сторінок ішли кліки</div></div><span class="tag-all">весь період</span></div>
           <div class="dist" id="pageDist"></div>
-          <div class="hint">клік по сторінці → бренди на її позиціях →</div>
+          <div class="hint">клік по сторінці → бренди на її позиціях</div>
         </div>
+      </div>
+
+      <div class="grid">
         <div class="panel">
           <div class="phead"><div><h2 id="posTitle">Позиції × бренди</h2><div class="psub" id="posSub">Який бренд на якій позиції</div></div><span class="tag-all">весь період</span></div>
           <div class="tbl-wrap" style="max-height:430px"><table id="posTbl"></table></div>
@@ -403,6 +495,9 @@ function KT_boot(D){
           <div class="dist" id="osDist"></div>
         </div>
       </div>
+
+        </div>
+      </details>
 
       </div>
 
@@ -493,73 +588,126 @@ function KT_boot(D){
     document.getElementById("clearF").onclick=clearFilter;
   }
 
-  // ── KPIs ────────────────────────────────────────────────────────────────────
+  // ── головне: один герой-показник + три плитки ───────────────────────────────
+  // Вісім однакових плиток не давали зачіпки, з чого починати читати. Тепер
+  // один показник веде, три підпирають, решта — рядком дрібним текстом.
+  function rangeLabel(){
+    const dm=d=>d.slice(8,10)+"."+d.slice(5,7);
+    if(state.mode==="day") return dm(D.days[state.dayIdx]);
+    if(state.mode==="all") return "весь період";
+    return `${dm(D.days[state.fromIdx])}–${dm(D.days[state.toIdx])}`;
+  }
+
   function renderKpis(){
     const per=seriesData();
     const cur=sumRange(per,state.fromIdx,state.toIdx);
     const len=state.toIdx-state.fromIdx+1, pTo=state.fromIdx-1;
     const prev = pTo>=0 ? sumRange(per,Math.max(0,pTo-len+1),pTo) : null;
+    const vals=[]; for(let i=state.fromIdx;i<=state.toIdx;i++) vals.push(per[i][5]);
+
+    // Стрілка + слово поруч із кольором: статус ніколи не тримається на самому кольорі.
+    const delta=(i,money,cls)=>{
+      if(!prev) return cls ? `<div class="dl flat"><span class="sub">немає з чим порівняти</span></div>`
+        : `<div class="hdl flat"><span class="sub">попереднього періоду такої ж довжини немає</span></div>`;
+      const d=cur[i]-prev[i], p=prev[i], pct=p>0?d/p*100:(d>0?100:0);
+      const k=d>0?"up":(d<0?"down":"flat"), ic=d>0?"▲":(d<0?"▼":"—"), w=d>0?"зростання":(d<0?"спад":"без змін");
+      return `<div class="${cls||"hdl"} ${k}">${ic} ${Math.abs(pct).toFixed(0)}% <span class="sub">${w} проти ${money?fmtMoney(p):fmtInt(p)}</span></div>`;
+    };
+    document.getElementById("hero").innerHTML=
+      `<div><div class="hlbl">Підтверджений дохід <span class="hrange">${esc(rangeLabel())}</span></div>
+        <div class="hval">${fmtMoney(cur[5])}</div>${delta(5,1)}</div>
+       <div class="hspark">${sparkSVG(vals,"var(--s1)")}</div>`;
+
+    const cr=div(cur[1],cur[0])*100, crPrev=prev?div(prev[1],prev[0])*100:null;
+    const crD=crPrev!==null?cr-crPrev:0;
+    const crCls=crD>0.05?"up":(crD<-0.05?"down":"flat"), crIc=crD>0.05?"▲":(crD<-0.05?"▼":"—");
+    document.getElementById("tiles").innerHTML=[
+      `<div class="kpi" style="--accent:var(--s1)"><div class="lbl">Кліки</div><div class="val mono">${fmtInt(cur[0])}</div>${delta(0,0,"dl")}</div>`,
+      `<div class="kpi" style="--accent:var(--s2)"><div class="lbl">Конверсії</div><div class="val mono">${fmtInt(cur[1])}</div>${delta(1,0,"dl")}</div>`,
+      `<div class="kpi" style="--accent:var(--dim)"><div class="lbl">CR</div><div class="val mono">${fmtPct(cr)}</div>`+
+        (crPrev!==null?`<div class="dl ${crCls}">${crIc} ${Math.abs(crD).toFixed(2)} п.п. <span class="sub">проти ${fmtPct(crPrev)}</span></div>`:`<div class="dl flat"><span class="sub">—</span></div>`)+`</div>`,
+    ].join("");
+
     const restrict = state.filter.active?state.filter.campSet:null;
     const activeSites=aggCampaigns(state.fromIdx,state.toIdx,restrict).size;
-    const cr=div(cur[1],cur[0])*100;
-    const D_=(i)=>prev?cur[i]-prev[i]:0, P_=(i)=>prev?prev[i]:0, R_=prev?0:1;
-    const defs=[
-      {lbl:"Кліки",v:fmtInt(cur[0]),c:"var(--blue)",d:D_(0),p:P_(0),raw:R_},
-      {lbl:"Конверсії",v:fmtInt(cur[1]),c:"var(--gold)",d:D_(1),p:P_(1),raw:R_},
-      {lbl:"CR",v:fmtPct(cr),c:"var(--cyan)",raw:1},
-      {lbl:"Ліди",v:fmtInt(cur[2]),c:"var(--purple)",d:D_(2),p:P_(2),raw:R_},
-      {lbl:"Продажі",v:fmtInt(cur[3]),c:"var(--green)",d:D_(3),p:P_(3),raw:R_},
-      {lbl:"Дохід (усього)",v:fmtMoney(cur[4]),c:"var(--dim)",d:D_(4),p:P_(4),money:1,raw:R_,hint:"ліди+сейли, до підтвердження"},
-      {lbl:"Дохід (підтв.)",v:fmtMoney(cur[5]),c:"var(--green)",d:D_(5),p:P_(5),money:1,raw:R_,hint:"sale_revenue — як у Keitaro"},
-      {lbl:state.filter.active?(state.filter.type==="brand"?"Брендів у фільтрі":"Активні сайти"):"Активні сайти",
-        v:fmtInt(state.filter.active&&state.filter.type==="brand"?state.filter.offerSet.size:activeSites),c:"var(--blue)",raw:1},
-    ];
-    document.getElementById("kpis").innerHTML=defs.map(k=>{
-      let dl="";
-      if(!k.raw){
-        const pct=k.p>0?(k.d/k.p*100):(k.d>0?100:0);
-        const cls=k.d>0?"up":(k.d<0?"down":"flat"), arr=k.d>0?"▲":(k.d<0?"▼":"—");
-        dl=`<div class="dl ${cls}">${arr} ${k.d>=0?"+":""}${k.money?fmtMoney(k.d):fmtInt(k.d)} <span style="color:var(--faint);font-weight:500">(${pct>=0?"+":""}${pct.toFixed(0)}%)</span></div>`;
-      }
-      return `<div class="kpi" style="--accent:${k.c}"${k.hint?` title="${k.hint}"`:""}><div class="lbl">${k.lbl}</div><div class="val mono">${k.v}</div>${dl}</div>`;
-    }).join("");
+    document.getElementById("moreKpi").innerHTML=
+      [["Ліди",fmtInt(cur[2])],["Продажі",fmtInt(cur[3])],["Дохід усього",fmtMoney(cur[4])],
+       [state.filter.active&&state.filter.type==="brand"?"Брендів у фільтрі":"Активних сайтів",
+        fmtInt(state.filter.active&&state.filter.type==="brand"?state.filter.offerSet.size:activeSites)]]
+      .map(([k,v])=>`<span>${k} <b>${v}</b></span>`).join("");
   }
-
-  // ── chart ────────────────────────────────────────────────────────────────────
+  // ── трафік по днях ───────────────────────────────────────────────────────────
+  // Було: кліки й конверсії на одному полі з двома різними масштабами. Такий
+  // графік вигадує кореляцію, якої в даних немає, — тому тепер це дві панелі
+  // на спільній осі часу, кожна зі своєю шкалою і своїм підписом.
   function renderChart(){
     const wrap=document.getElementById("chartWrap");
     const per=seriesData();
-    const s=[]; for(let i=state.fromIdx;i<=state.toIdx;i++) s.push({idx:i,day:D.days[i],clicks:per[i][0],conv:per[i][1],rev:per[i][4]});
-    const W=760,H=260,PL=44,PR=44,PT=14,PB=26, iw=W-PL-PR, ih=H-PT-PB, n=s.length;
-    const maxC=Math.max(1,...s.map(d=>d.clicks)), maxV=Math.max(1,...s.map(d=>d.conv));
-    const x=i=> n<=1?PL+iw/2:PL+(i/(n-1))*iw, yC=v=>PT+ih-(v/maxC)*ih, yV=v=>PT+ih-(v/maxV)*ih;
-    let area=`M ${x(0)} ${yC(s[0].clicks)}`, line=`M ${x(0)} ${yC(s[0].clicks)}`, cl=`M ${x(0)} ${yV(s[0].conv)}`;
-    for(let i=1;i<n;i++){ area+=` L ${x(i)} ${yC(s[i].clicks)}`; line+=` L ${x(i)} ${yC(s[i].clicks)}`; cl+=` L ${x(i)} ${yV(s[i].conv)}`; }
-    area+=` L ${x(n-1)} ${PT+ih} L ${x(0)} ${PT+ih} Z`;
-    let grid="",ylab="";
-    for(let g=0;g<=4;g++){ const yy=PT+(g/4)*ih, val=maxC*(1-g/4);
-      grid+=`<line x1="${PL}" y1="${yy}" x2="${W-PR}" y2="${yy}" stroke="rgba(72,88,124,.22)" stroke-dasharray="3 3"/>`;
-      ylab+=`<text x="${PL-8}" y="${yy+3}" text-anchor="end" fill="var(--faint)" font-size="9" font-family="var(--mono)">${fmtInt(val)}</text>`; }
-    let xlab="", step=Math.max(1,Math.ceil(n/9));
-    for(let i=0;i<n;i+=step) xlab+=`<text x="${x(i)}" y="${H-8}" text-anchor="middle" fill="var(--faint)" font-size="9" font-family="var(--mono)">${shortDay(s[i].day)}</text>`;
-    let dots=""; for(let i=0;i<n;i++) if(s[i].conv>0) dots+=`<circle cx="${x(i)}" cy="${yV(s[i].conv)}" r="3" fill="var(--gold)"/>`;
-    wrap.innerHTML=`<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
-      <defs><linearGradient id="ga" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="var(--blue)" stop-opacity=".45"/><stop offset="100%" stop-color="var(--blue)" stop-opacity="0"/></linearGradient></defs>
-      ${grid}${ylab}${xlab}<path d="${area}" fill="url(#ga)"/><path d="${line}" fill="none" stroke="var(--blue)" stroke-width="2"/>
-      <path d="${cl}" fill="none" stroke="var(--gold)" stroke-width="1.8"/>${dots}
-      <rect id="hit" x="${PL}" y="${PT}" width="${iw}" height="${ih}" fill="transparent"/>
-      <line id="cursor" x1="0" y1="${PT}" x2="0" y2="${PT+ih}" stroke="var(--border-hi)" stroke-width="1" style="opacity:0"/></svg><div class="tip" id="tip"></div>`;
-    const svg=wrap.querySelector("svg"),tip=wrap.querySelector("#tip"),cursor=wrap.querySelector("#cursor"),hit=wrap.querySelector("#hit");
-    hit.addEventListener("mousemove",ev=>{ const rect=svg.getBoundingClientRect(); const px=(ev.clientX-rect.left)/rect.width*W;
-      let i=Math.round((px-PL)/iw*(n-1)); i=Math.max(0,Math.min(n-1,i)); const d=s[i], cx=x(i);
-      cursor.setAttribute("x1",cx); cursor.setAttribute("x2",cx); cursor.style.opacity=1; tip.style.opacity=1;
-      tip.style.left=Math.min(rect.width-150,Math.max(0,(cx/W)*rect.width+10))+"px"; tip.style.top="6px";
-      tip.innerHTML=`<b>${d.day}</b><br><span class="k">Кліки:</span> <b class="mono">${fmtInt(d.clicks)}</b><br><span class="k">Конв:</span> <b class="mono" style="color:var(--gold)">${fmtInt(d.conv)}</b>${d.rev>0?`<br><span class="k">Дохід:</span> <b class="mono" style="color:var(--green)">${fmtMoney(d.rev)}</b>`:""}`; });
-    hit.addEventListener("mouseleave",()=>{tip.style.opacity=0;cursor.style.opacity=0;});
-    hit.addEventListener("click",ev=>{ const rect=svg.getBoundingClientRect(); const px=(ev.clientX-rect.left)/rect.width*W;
-      let i=Math.round((px-PL)/iw*(n-1)); i=Math.max(0,Math.min(n-1,i))+state.fromIdx; state.mode="day"; state.dayIdx=i; daySel.value=i; syncSeg(); render(); });
-  }
+    const s=[]; for(let i=state.fromIdx;i<=state.toIdx;i++) s.push({idx:i,day:D.days[i],clicks:per[i][0],conv:per[i][1],rev:per[i][5]});
+    const n=s.length;
+    const W=900,PL=54,PR=14,PT=22,H1=128,GAP=30,H2=70,XB=22,H=PT+H1+GAP+H2+XB;
+    const iw=W-PL-PR, top2=PT+H1+GAP;
+    const x=i=> n<=1 ? PL+iw/2 : PL+(i/(n-1))*iw;
+    // верхівка осі — кругле число: «16 054» на підписі читається як дані, хоч це просто межа
+    const niceMax=(m)=>{ if(!(m>0)) return 1; const e=Math.pow(10,Math.floor(Math.log10(m))), f=m/e;
+      const s=f<=1?1:f<=1.2?1.2:f<=1.5?1.5:f<=2?2:f<=2.5?2.5:f<=3?3:f<=4?4:f<=5?5:f<=6?6:f<=8?8:10; return s*e; };
+    const m1=niceMax(Math.max(1,...s.map(d=>d.clicks))), m2=niceMax(Math.max(1,...s.map(d=>d.conv)));
+    const y1=v=>PT+H1-(v/m1)*H1, y2=v=>top2+H2-(v/m2)*H2;
 
+    const path=(f)=>{ let p=`M ${x(0).toFixed(1)} ${f(0).toFixed(1)}`; for(let i=1;i<n;i++) p+=` L ${x(i).toFixed(1)} ${f(i).toFixed(1)}`; return p; };
+    const l1=path(i=>y1(s[i].clicks)), l2=path(i=>y2(s[i].conv));
+    const a1=l1+` L ${x(n-1).toFixed(1)} ${PT+H1} L ${x(0).toFixed(1)} ${PT+H1} Z`;
+
+    // суцільні волосяні лінії сітки — пунктир читається як «поріг», хоч це просто сітка
+    let grid="",ylab="";
+    for(const [top,hh,mx,fmt] of [[PT,H1,m1,fmtInt],[top2,H2,m2,fmtInt]]){
+      for(let g=0;g<=2;g++){ const yy=top+(g/2)*hh;
+        grid+=`<line x1="${PL}" y1="${yy}" x2="${W-PR}" y2="${yy}" stroke="var(--grid)" stroke-width="1"/>`;
+        ylab+=`<text x="${PL-9}" y="${yy+3}" text-anchor="end" fill="var(--faint)" font-size="9" font-family="var(--mono)">${fmt(mx*(1-g/2))}</text>`; }
+    }
+    let xlab="", step=Math.max(1,Math.ceil(n/10));
+    const dm=d=>d.slice(8,10)+"."+d.slice(5,7);
+    for(let i=0;i<n;i+=step) xlab+=`<text x="${x(i).toFixed(1)}" y="${H-6}" text-anchor="middle" fill="var(--faint)" font-size="9" font-family="var(--mono)">${dm(s[i].day)}</text>`;
+    // одна точка не малюється лінією — показуємо маркер
+    const lone = n===1 ? `<circle cx="${x(0)}" cy="${y1(s[0].clicks)}" r="4" fill="var(--s1)"/><circle cx="${x(0)}" cy="${y2(s[0].conv)}" r="4" fill="var(--s2)"/>` : "";
+
+    wrap.innerHTML=`<svg class="chart" viewBox="0 0 ${W} ${H}">
+      <defs><linearGradient id="ga" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="var(--s1)" stop-opacity=".34"/><stop offset="100%" stop-color="var(--s1)" stop-opacity="0"/></linearGradient></defs>
+      ${grid}${ylab}${xlab}
+      <text x="${PL}" y="${PT-8}" fill="var(--s1)" font-size="10.5" font-weight="700" letter-spacing=".5">КЛІКИ</text>
+      <text x="${PL}" y="${top2-8}" fill="var(--s2)" font-size="10.5" font-weight="700" letter-spacing=".5">КОНВЕРСІЇ</text>
+      <path d="${a1}" fill="url(#ga)"/>
+      <path d="${l1}" fill="none" stroke="var(--s1)" stroke-width="2" stroke-linejoin="round"/>
+      <path d="${l2}" fill="none" stroke="var(--s2)" stroke-width="2" stroke-linejoin="round"/>
+      ${lone}
+      <line id="cursor" x1="0" y1="${PT}" x2="0" y2="${top2+H2}" stroke="var(--border-hi)" stroke-width="1" style="opacity:0"/>
+      <circle id="d1" r="4" fill="var(--s1)" stroke="var(--panel-solid)" stroke-width="2" style="opacity:0"/>
+      <circle id="d2" r="4" fill="var(--s2)" stroke="var(--panel-solid)" stroke-width="2" style="opacity:0"/>
+      <rect id="hit" x="${PL}" y="${PT}" width="${iw}" height="${top2+H2-PT}" fill="transparent"/>
+      </svg><div class="tip" id="tip"></div>`;
+
+    const svg=wrap.querySelector("svg"),tip=wrap.querySelector("#tip"),cursor=wrap.querySelector("#cursor"),
+          hit=wrap.querySelector("#hit"),d1=wrap.querySelector("#d1"),d2=wrap.querySelector("#d2");
+    const idxAt=(ev)=>{ const r=svg.getBoundingClientRect(); const px=(ev.clientX-r.left)/r.width*W;
+      return [Math.max(0,Math.min(n-1,Math.round((px-PL)/iw*(n-1)))), r]; };
+    hit.addEventListener("mousemove",ev=>{
+      const [i,r]=idxAt(ev), d=s[i], cx=x(i);
+      cursor.setAttribute("x1",cx); cursor.setAttribute("x2",cx); cursor.style.opacity=1;
+      d1.setAttribute("cx",cx); d1.setAttribute("cy",y1(d.clicks)); d1.style.opacity=1;
+      d2.setAttribute("cx",cx); d2.setAttribute("cy",y2(d.conv));  d2.style.opacity=1;
+      tip.style.opacity=1;
+      tip.style.left=Math.min(r.width-170,Math.max(0,(cx/W)*r.width+12))+"px"; tip.style.top="4px";
+      const cr=div(d.conv,d.clicks)*100;
+      tip.innerHTML=`<b>${d.day}</b><br><span class="k">Кліки:</span> <b class="mono">${fmtInt(d.clicks)}</b>`+
+        `<br><span class="k">Конверсії:</span> <b class="mono" style="color:var(--s2)">${fmtInt(d.conv)}</b>`+
+        `<br><span class="k">CR:</span> <b class="mono">${d.clicks?fmtPct(cr):"—"}</b>`+
+        (d.rev>0?`<br><span class="k">Підтв. дохід:</span> <b class="mono" style="color:var(--good-ink)">${fmtMoney(d.rev)}</b>`:"");
+    });
+    hit.addEventListener("mouseleave",()=>{tip.style.opacity=0;cursor.style.opacity=0;d1.style.opacity=0;d2.style.opacity=0;});
+    hit.addEventListener("click",ev=>{ const [i]=idxAt(ev); state.mode="day"; state.dayIdx=i+state.fromIdx;
+      daySel.value=state.dayIdx; syncSeg(); render(); });
+  }
   // ── sites table ──────────────────────────────────────────────────────────────
   const sortState={site:{key:2,asc:false},brand:{key:1,asc:false}};
   let siteFilter="",brandFilter="";
@@ -586,7 +734,7 @@ function KT_boot(D){
     document.getElementById("siteTbl").innerHTML=
       `<thead><tr>${head.map((h,i)=>`<th data-i="${i}" class="${sortState.site.key===i?'sorted '+(sortState.site.asc?'asc':''):''}">${h}</th>`).join("")}</tr></thead>`+
       `<tbody>${shown.length?shown.map(r=>`<tr data-name="${esc(r.name)}">
-        <td><span class="site">${esc(r.name)}</span> ${r.prefix!=="—"?`<span class="chip">${r.prefix}</span>`:""}${(state.team<0&&nTeams>1)?`<span class="chip tm" title="${esc(D.teams[campTeam[r.ci]])}">${teamShort(campTeam[r.ci])}</span>`:""}</td>
+        <td><span class="site">${esc(r.name)}</span> ${r.prefix!=="—"?`<span class="chip">${r.prefix}</span>`:""}${(state.team<0&&nTeams>1)?teamChip(campTeam[r.ci]):""}</td>
         <td>${r.geo!=="—"?`<span class="chip geo">${r.geo}</span>`:'<span class="zero">—</span>'}</td>
         <td class="bar-cell mono"><span class="bar" style="width:${r.clicks/maxC*100}%"></span><span>${fmtInt(r.clicks)}</span></td>
         <td class="mono ${r.conv>0?'conv-badge':'zero'}">${r.conv||"0"}</td>
@@ -621,7 +769,7 @@ function KT_boot(D){
       `<thead><tr>${head.map((h,i)=>`<th data-i="${i}" class="${sortState.brand.key===i?'sorted '+(sortState.brand.asc?'asc':''):''}">${h}</th>`).join("")}</tr></thead>`+
       `<tbody>${shown.length?shown.map(r=>`<tr data-name="${esc(r.name)}">
         <td><span class="site">${esc(r.name)}</span></td>
-        <td class="bar-cell mono"><span class="bar" style="width:${r.clicks/maxC*100}%;background:var(--cyan)"></span><span>${fmtInt(r.clicks)}</span></td>
+        <td class="bar-cell mono"><span class="bar" style="width:${r.clicks/maxC*100}%"></span><span>${fmtInt(r.clicks)}</span></td>
         <td class="mono ${r.conv>0?'conv-badge':'zero'}">${r.conv||"0"}</td>
         <td class="mono">${r.conv>0?fmtPct(r.cr):'<span class="zero">—</span>'}</td>
         <td class="mono ${r.sales?'':'zero'}">${r.sales||"0"}</td>
@@ -656,8 +804,8 @@ function KT_boot(D){
     document.getElementById("pageDist").innerHTML = distHead("Сторінка","Кліки · Конв") +
       (pg.length? pg.map(p=>`<div class="row drow ${state.selectedPage===p.gi?'sel':''}" data-page="${p.gi}">
           <div class="name" title="${esc(p.label)}">${esc(p.label)}</div>
-          <div class="track"><div class="fill" style="width:${p.v/maxG*100}%;background:linear-gradient(90deg,var(--purple),var(--blue))"></div></div>
-          <div class="v mono">${fmtInt(p.v)}${p.conv?` · <span style="color:var(--gold)">${p.conv}</span>`:""}</div></div>`).join("") : emptyDist())
+          <div class="track"><div class="fill" style="width:${p.v/maxG*100}%"></div></div>
+          <div class="v mono">${fmtInt(p.v)}${p.conv?` · <span style="color:var(--s2)">${p.conv}</span>`:""}</div></div>`).join("") : emptyDist())
       + (pgEmpty>0?noteHTML(pgEmpty):"");
     document.getElementById("pageDist").querySelectorAll("[data-page]").forEach(el=>el.onclick=()=>{
       const gi=+el.dataset.page; state.selectedPage=(state.selectedPage===gi?null:gi); renderPosPages();
@@ -689,9 +837,9 @@ function KT_boot(D){
     document.getElementById("posTbl").innerHTML =
       `<thead><tr><th>Поз.</th><th>Бренд</th><th>Кліки</th><th>Конв</th></tr></thead>`+
       `<tbody>${rows.length? rows.map(r=>`<tr data-name="${esc(r.offer)}">
-         <td class="mono" style="font-weight:700;color:var(--gold)">${r.pos===""?"—":esc(r.pos)}</td>
+         <td class="mono" style="font-weight:700;color:var(--s4)">${r.pos===""?"—":esc(r.pos)}</td>
          <td><span class="site">${esc(r.offer)}</span></td>
-         <td class="bar-cell mono"><span class="bar" style="width:${r.clicks/maxc*100}%;background:var(--gold)"></span><span>${fmtInt(r.clicks)}</span></td>
+         <td class="bar-cell mono"><span class="bar" style="width:${r.clicks/maxc*100}%"></span><span>${fmtInt(r.clicks)}</span></td>
          <td class="mono ${r.conv>0?'conv-badge':'zero'}">${r.conv||"0"}</td></tr>`).join("") : `<tr class="nolink"><td colspan="4" class="emptycell">Немає позицій із мітками для цього зрізу.</td></tr>`}</tbody>`;
     document.getElementById("posTbl").querySelectorAll("tbody tr[data-name]").forEach(tr=>tr.onclick=()=>setFilter("brand",tr.dataset.name));
     if(sp!=null){ const c=document.getElementById("clrPage"); if(c) c.onclick=e=>{ e.stopPropagation(); state.selectedPage=null; renderPosPages(); }; }
@@ -700,7 +848,7 @@ function KT_boot(D){
     const max=Math.max(1,...items.map(i=>i.v));
     return items.map(i=>`<div class="row"><div class="name" title="${esc(i.label||i.name)}">${esc(i.label||i.name)}</div>
       <div class="track"><div class="fill" style="width:${i.v/max*100}%;${colorFn?'background:'+colorFn(i):''}"></div></div>
-      <div class="v mono">${fmtInt(i.v)}${i.conv?` · <span style="color:var(--gold)">${i.conv}</span>`:""}</div></div>`).join("");
+      <div class="v mono">${fmtInt(i.v)}${i.conv?` · <span style="color:var(--s2)">${i.conv}</span>`:""}</div></div>`).join("");
   }
   const emptyDist=()=>'<div style="color:var(--faint);font-size:12px">немає даних</div>';
 
@@ -758,7 +906,7 @@ function KT_boot(D){
       (items.length? items.map(i=>`<div class="row drow" data-prefix="${esc(i.label)}">
           <div class="name" title="${esc(i.label)}">${esc(i.label)}</div>
           <div class="track"><div class="fill" style="width:${i.v/maxP*100}%;background:linear-gradient(90deg,var(--purple),var(--blue))"></div></div>
-          <div class="v mono">${fmtInt(i.v)}${i.conv?` · <span style="color:var(--gold)">${i.conv}</span>`:""}</div></div>`).join("") : emptyDist());
+          <div class="v mono">${fmtInt(i.v)}${i.conv?` · <span style="color:var(--s2)">${i.conv}</span>`:""}</div></div>`).join("") : emptyDist());
     prefEl.querySelectorAll("[data-prefix]").forEach(el=>el.onclick=()=>setFilter("site",el.dataset.prefix,"partial"));
     // ОС — по командах (весь період). При активному фільтрі сутності не розкладається.
     const osEl=document.getElementById("osDist");
@@ -863,46 +1011,57 @@ function KT_boot(D){
     return {w,rows,byTeam};
   }
 
-  // ── картки команд ──────────────────────────────────────────────────────────
+  // ── команди: список з однією базою, а не шість окремих карток ──────────────
+  // Картки доводилось порівнювати очима «на око»; смуги від спільної лівої межі
+  // порівнюються точно. Колір закріплений за командою, не за місцем у рейтингу.
   function renderTeamCards(){
     const box=document.getElementById("tcards");
-    if(nTeams<2){ box.style.display="none"; return; }
-    const per=teamSeriesAll();
-    const w=MV&&MV.w;
-    // спарклайн: вибраний період, але якщо це 1–2 дні — останні 14, щоб була форма
-    const sFrom = (state.toIdx-state.fromIdx)>=2 ? state.fromIdx : Math.max(0,N-14);
-    const sTo   = (state.toIdx-state.fromIdx)>=2 ? state.toIdx   : N-1;
-    const sum=(a,from,to)=>{const s=[0,0,0,0,0,0];for(let i=from;i<=to;i++)for(let j=0;j<6;j++)s[j]+=a[i][j];return s;};
+    const wrapEl=document.getElementById("teamBlock");
+    if(nTeams<2){ if(wrapEl) wrapEl.style.display="none"; return; }
+    const per=teamSeriesAll(), w=MV&&MV.w;
+    const sFrom=(state.toIdx-state.fromIdx)>=2?state.fromIdx:Math.max(0,N-14);
+    const sTo  =(state.toIdx-state.fromIdx)>=2?state.toIdx:N-1;
+    const sum=(a,f,t)=>{const s=[0,0,0,0,0,0];for(let i=f;i<=t;i++)for(let j=0;j<6;j++)s[j]+=a[i][j];return s;};
 
-    const cards=[];
-    const all=Array.from({length:N},(_,i)=>{const s=[0,0,0,0,0,0];for(let t=0;t<nTeams;t++)for(let j=0;j<6;j++)s[j]+=per[t][i][j];return s;});
-    const mk=(idx,name,series,color)=>{
-      const cur=sum(series,state.fromIdx,state.toIdx);
-      const prv=w?sum(series,w.prev[0],w.prev[1]):null;
-      const curW=w?sum(series,w.cur[0],w.cur[1]):cur;
-      const cr=div(cur[1],cur[0])*100;
-      const vals=[];for(let i=sFrom;i<=sTo;i++) vals.push(series[i][0]);
-      return `<div class="tcard ${state.team===idx?"on":""}" data-tm="${idx}" title="${esc(name)}">
-        <div class="tn">${esc(name)}</div>
-        <div class="tv">${fmtInt(cur[0])}</div>
-        ${prv?`<div style="margin-top:6px" title="${esc(w.label)}">${w.fallback?`<span style="color:var(--faint);font-size:10.5px;font-weight:700;margin-right:4px">7д</span>`:""}${dHTML(curW[0]-prv[0],prv[0])}</div>`:""}
-        ${sparkSVG(vals,color)}
-        <div class="tx"><span>CR <b>${cur[1]?fmtPct(cr):"—"}</b></span><span>конв <b>${fmtInt(cur[1])}</b></span><span>підтв <b>${cur[5]>0?fmtMoney(cur[5]):"—"}</b></span></div>
-      </div>`;
-    };
-    cards.push(mk(-1,"Всі команди",all,"var(--blue)"));
-    const pal=["var(--green)","var(--gold)","var(--purple)","var(--cyan)","var(--blue)","var(--green)"];
-    for(let t=0;t<nTeams;t++) cards.push(mk(t,D.teams[t],per[t],pal[t%pal.length]));
-    box.innerHTML=cards.join("");
-    box.querySelectorAll(".tcard").forEach(c=>c.onclick=()=>selectTeam(+c.dataset.tm));
+    const rows=[];
+    for(let t=0;t<nTeams;t++){
+      const cur=sum(per[t],state.fromIdx,state.toIdx);
+      const cw=w?sum(per[t],w.cur[0],w.cur[1]):cur, pw=w?sum(per[t],w.prev[0],w.prev[1]):null;
+      const vals=[]; for(let i=sFrom;i<=sTo;i++) vals.push(per[t][i][0]);
+      rows.push({t,cur,d:pw?cw[0]-pw[0]:0,p:pw?pw[0]:0,has:!!pw,vals});
+    }
+    const max=Math.max(1,...rows.map(r=>r.cur[0]));
+    rows.sort((a,b)=>b.cur[0]-a.cur[0]);
+    const tot=rows.reduce((s,r)=>s+r.cur[0],0);
+
+    document.getElementById("tmSub").textContent =
+      `${rangeLabel()} · ${fmtInt(tot)} кліків усього${w?` · зміна — ${w.fallback?"за останні 7 днів":"до попереднього періоду"}`:""}`;
+    document.getElementById("tmHead").innerHTML =
+      ["Команда","Обсяг кліків","Кліки","Зміна","Конверсії","CR","Підтв. дохід","Динаміка"].map(h=>`<span>${h}</span>`).join("");
+    box.innerHTML=rows.map(r=>{
+      const cr=div(r.cur[1],r.cur[0])*100;
+      const k=r.d>0?"up":(r.d<0?"down":"flat"), ic=r.d>0?"▲":(r.d<0?"▼":"—");
+      const pct=r.p>0?r.d/r.p*100:(r.d>0?100:0);
+      return `<div class="trow ${state.team===r.t?"on":""}" data-tm="${r.t}" style="--hue:${teamHue(r.t)}">
+        <span class="tname"><i class="tdot"></i>${esc(D.teams[r.t]||"")}</span>
+        <span class="tbar" title="${(r.cur[0]/Math.max(1,tot)*100).toFixed(1)}% усього трафіку · смуга — відносно найбільшої команди"><i style="width:${(r.cur[0]/max*100).toFixed(1)}%"></i></span>
+        <span class="tnum">${fmtInt(r.cur[0])}</span>
+        <span class="tnum ${k}">${r.has?`${ic} ${pct>=0?"+":"−"}${Math.abs(pct).toFixed(0)}%`:"<span class='zero'>—</span>"}</span>
+        <span class="tnum">${fmtInt(r.cur[1])}</span>
+        <span class="tnum tcr">${r.cur[1]?fmtPct(cr):"<span class='zero'>—</span>"}</span>
+        <span class="tnum trev">${r.cur[5]>0?fmtMoney(r.cur[5]):"<span class='zero'>—</span>"}</span>
+        <span class="tsp">${sparkSVG(r.vals,teamHue(r.t))}</span></div>`;
+    }).join("");
+    box.querySelectorAll(".trow").forEach(el=>el.onclick=()=>{
+      const t=+el.dataset.tm; selectTeam(state.team===t?-1:t);
+    });
   }
-
   // ── рух брендів ────────────────────────────────────────────────────────────
   function renderMovers(){
     const box=document.getElementById("mv"), sub=document.getElementById("mvSub");
     if(!MV){ box.innerHTML=`<div class="mvempty">Замало історії, щоб порівняти два періоди.</div>`; sub.textContent=""; return; }
     const m=mvMetric, money=m===5;
-    const name=(r)=> esc(D.offers[r.oi]||"(без офера)")+(MV.byTeam&&r.ti!=null?` <span class="chip tm">${teamShort(r.ti)}</span>`:"");
+    const name=(r)=> esc(D.offers[r.oi]||"(без офера)")+(MV.byTeam&&r.ti!=null?" "+teamChip(r.ti):"");
     const totalCur=MV.rows.reduce((s,r)=>s+r.c[m],0);
     const floor=Math.max(money?20:(m===1?3:30), totalCur*0.004);
 
@@ -938,9 +1097,9 @@ function KT_boot(D){
     box.innerHTML =
       col("▲ Зростають","up",up,"Нікого, хто б помітно виріс.") +
       col("▼ Просідають","down",dn,"Ніхто помітно не просів.") +
-      `<div><div class="mvh"><span style="color:var(--gold)">⚠ Клікають, але не конвертять</span><span class="n">${nc.length}</span></div>
+      `<div><div class="mvh"><span style="color:var(--warn)">⚠ Клікають, але не конвертять</span><span class="n">${nc.length}</span></div>
         ${nc.length?nc.map(r=>`<div class="mvrow" data-oi="${r.oi}" data-ti="${r.ti==null?"":r.ti}">
-          <div class="mvn">${name(r)}</div><div class="mvd" style="color:var(--gold)">${fmtInt(r.c[0])}</div>
+          <div class="mvn">${name(r)}</div><div class="mvd" style="color:var(--warn)">${fmtInt(r.c[0])}</div>
           <div class="mvs">кліків за період · 0 конверсій ${r.p[1]>0?`<span class="badge dead">раніше ${fmtInt(r.p[1])}</span>`:""}</div></div>`).join("")
           :`<div class="mvempty">Усі помітні бренди дають конверсії. 👌</div>`}</div>`;
 
@@ -1116,10 +1275,10 @@ function KT_boot(D){
     const riskClicks=allRows.filter(r=>!r.pb).reduce((s,r)=>s+r.clicks,0);
     const totClicks=allRows.reduce((s,r)=>s+r.clicks,0);
     document.getElementById("netKpis").innerHTML=[
-      {lbl:"Партнерок",v:fmtInt(mine.length),c:"var(--blue)"},
-      {lbl:"Без постбеку",v:fmtInt(badNets),c:badNets?"var(--red)":"var(--green)"},
-      {lbl:"Оферів без постбеку",v:fmtInt(badOff)+" / "+fmtInt(NOFF.filter(o=>teamOK(o[2])).length),c:badOff?"var(--red)":"var(--green)"},
-      {lbl:"Кліків повз постбек",v:fmtInt(riskClicks),c:riskClicks?"var(--gold)":"var(--green)",
+      {lbl:"Партнерок",v:fmtInt(mine.length),c:"var(--s1)"},
+      {lbl:"Без постбеку",v:fmtInt(badNets),c:badNets?"var(--crit)":"var(--good)"},
+      {lbl:"Оферів без постбеку",v:fmtInt(badOff)+" / "+fmtInt(NOFF.filter(o=>teamOK(o[2])).length),c:badOff?"var(--crit)":"var(--good)"},
+      {lbl:"Кліків повз постбек",v:fmtInt(riskClicks),c:riskClicks?"var(--warn)":"var(--good)",
         hint:"за вибраний період; у дужках — частка всього трафіку",
         sub:totClicks?`${(riskClicks/totClicks*100).toFixed(1)}% трафіку за період`:""},
     ].map(k=>`<div class="kpi" style="--accent:${k.c}"${k.hint?` title="${k.hint}"`:""}><div class="lbl">${k.lbl}</div>`+
@@ -1136,7 +1295,7 @@ function KT_boot(D){
             : `<span style="color:var(--red)">⛔</span>`));
       const main=`<tr class="netrow" data-k="${r.ti}|${r.ni}">
         <td><span class="caret">${open?"▾":"▸"}</span> <span class="site">${esc(r.name)}</span>`+
-        `${(state.team<0&&nTeams>1)?` <span class="chip tm" title="${esc(D.teams[r.ti]||"")}">${teamShort(r.ti)}</span>`:""}</td>
+        `${(state.team<0&&nTeams>1)?" "+teamChip(r.ti):""}</td>
         <td>${r.pb?`<span class="ok">✓</span>`:`<span class="badge dead">немає</span>`}</td>
         <td>${idCell}</td>
         <td class="mono">${fmtInt(r.offers.length)}</td>
@@ -1178,7 +1337,7 @@ function KT_boot(D){
     document.getElementById("chartTitle").textContent=`Трафік · ${rangeTxt}${scopeTxt}`;
     if(state.tab==="net"){ renderNets(); return; }
     MV=moversData();
-    renderKpis(); renderTeamCards(); renderDigest(); renderMovers();
+    renderKpis(); renderDigest(); renderTeamCards(); renderMovers();
     renderChart(); renderSites(); renderBrands(); renderPosPages(); renderConv(); renderGeo(); renderPrefOs();
   }
 
