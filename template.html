@@ -601,14 +601,12 @@ function KT_boot(D){
             <div class="phead">
               <div><h2>Партнерські мережі</h2><div class="psub" id="netSub"></div></div>
               <div class="tools">
-                <div class="seg alt" id="netFilt"><button data-f="all">Усі</button><button data-f="nopb">Без постбеку</button><button data-f="noid">Без клік-айді</button><button data-f="traf">З трафіком</button></div>
+                <div class="seg alt" id="netFilt"><button data-f="all">Усі</button><button data-f="silent">⚠ Тиша</button><button data-f="cfg">Є зауваження</button><button data-f="traf">З трафіком</button></div>
                 <input class="search" id="netSearch" placeholder="мережа або офер…">
               </div>
             </div>
             <div class="tbl-wrap" style="max-height:none"><table id="netTbl"></table></div>
-            <div class="hint">«Постбек» — чи заповнено URL постбеку в налаштуваннях мережі в Keitaro.
-              «Клік-айді» — чи передається ідентифікатор кліка (offer_param мережі або макрос у посиланні офера);
-              без нього мережа не має чим зіставити конверсію. Колонки трафіку — реальність за вибраний період.</div>
+            <div class="hint" id="netFoot"></div>
           </div>
         </div>
       </div>
@@ -1382,13 +1380,16 @@ function KT_boot(D){
   }
 
   // ── вкладка «Партнерки» ────────────────────────────────────────────────────
-  // Статус постбеку по оферу визначаємо з довідників Keitaro:
-  //   немає мережі            → постбек неможливий;
-  //   у мережі порожній URL   → постбек не налаштований;
-  //   є URL, але ні offer_param у мережі, ні макросу в посиланні офера
-  //                           → клік-айді не передається, конверсію нема з чим зіставити;
-  //   інакше                  → налаштовано.
-  // Колонки трафіку — це вже реальність: чи приходять конверсії насправді.
+  // Перша версія оголошувала «постбеку немає» за порожнім polem postback_url у
+  // картці мережі. Перевірка на живих даних це спростувала: під такими
+  // мережами конверсії приходять (Asia — 53 за 30 днів, Italy — 52). У Keitaro
+  // це поле лише збережений шаблон URL; приймач постбеків — адреса трекера, і
+  // мережа може її викликати з порожнім полем.
+  //
+  // Тому тепер стан визначає реальність, а налаштування лишаються підказкою:
+  //   конверсії за період є            → працює;
+  //   конверсій 0, але трафіку стільки, що їх мало б бути ≥3 → тиша;
+  //   трафіку замало                   → нічого не стверджуємо.
   const NETS = D.nets || [], NOFF = D.noff || [];
   const netOpen = new Set();
   let netFilt = "all", netQ = "";
@@ -1402,128 +1403,167 @@ function KT_boot(D){
     return (lastConvCache=m);
   }
 
-  function offStatus(o){                // o = рядок noff
-    const ni=o[3]; if(ni<0) return "nonet";
-    const n=NETS[ni]; if(!n) return "nonet";
-    if(!n[2]) return "nopb";
-    if(!n[3] && !o[4]) return "noid";
-    return "ok";
+  // Підказки про налаштування — саме підказки, не вирок.
+  function offHints(o){
+    const h=[]; const ni=o[3], n=ni>=0?NETS[ni]:null;
+    if(ni<0) h.push("без партнерки");
+    else{
+      if(!n[2]) h.push("URL постбеку не заповнений");
+      if(!n[3] && !o[4]) h.push("клік-айді не передається");
+    }
+    return h;
   }
-  const STAT={
-    ok:   {t:"налаштовано", c:"var(--green)", b:""},
-    noid: {t:"без клік-айді", c:"var(--gold)", b:"warn"},
-    nopb: {t:"без постбеку", c:"var(--red)", b:"dead"},
-    nonet:{t:"без партнерки", c:"var(--red)", b:"dead"},
-  };
 
   function netsData(){
     const from=state.fromIdx, to=state.toIdx;
-    // трафік за вибраний період по парі офер×команда
-    const tr=new Map();
-    for(const r of D.od){ const di=r[0]; if(di<from||di>to) continue;
-      const k=r[1]+"|"+r[8]; let a=tr.get(k); if(!a){a=[0,0];tr.set(k,a);} a[0]+=r[2]; a[1]+=r[3]; }
+    const tr=new Map();                 // офер×команда → [кліки, конверсії]
+    let totClicks=0, totConv=0;
+    for(const r of D.od){ const di=r[0]; if(di<from||di>to) continue; if(!teamOK(r[8])) continue;
+      const k=r[1]+"|"+r[8]; let a=tr.get(k); if(!a){a=[0,0];tr.set(k,a);} a[0]+=r[2]; a[1]+=r[3];
+      totClicks+=r[2]; totConv+=r[3]; }
+    const cr=totClicks>0?totConv/totClicks:0;   // очікувана конверсійність по зрізу
     const lc=lastConvByOffer();
+    // Скільки кліків треба, щоб відсутність конверсій щось означала (очікуємо ≥3).
+    const silentFloor = cr>0 ? Math.max(100, Math.ceil(3/cr)) : Infinity;
 
-    // псевдо-мережа «без партнерки» — своя на кожну команду
-    const extra=new Map();
     const rows=NETS.map((n,i)=>({ni:i,name:n[0],ti:n[1],pb:n[2],par:n[3],offers:[],clicks:0,conv:0,withTraf:0,ownMacro:0,last:-1}));
-    const get=(ni,ti)=>{
-      if(ni>=0) return rows[ni];
-      const k="x"+ti; let r=extra.get(k);
-      if(!r){ r={ni:-1,name:"— без партнерки —",ti,pb:0,par:0,offers:[],clicks:0,conv:0,withTraf:0,ownMacro:0,last:-1,virtual:1}; extra.set(k,r); }
+    const extra=new Map();
+    const pseudo=(key,ti,name,ghost)=>{
+      let r=extra.get(key);
+      if(!r){ r={ni:-1,name,ti,pb:0,par:0,offers:[],clicks:0,conv:0,withTraf:0,ownMacro:0,last:-1,virtual:1,ghost:!!ghost}; extra.set(key,r); }
       return r;
+    };
+    const seen=new Set();
+    const push=(r,o)=>{
+      const oi=o.oi, k=oi>=0?oi+"|"+o.ti:null;
+      const t=k?tr.get(k):null, cl=t?t[0]:0, cv=t?t[1]:0;
+      const last=k&&lc.has(k)?lc.get(k):-1;
+      r.offers.push({name:o.name, hints:o.hints, clicks:cl, conv:cv, last, silent: cv===0 && cl>=silentFloor});
+      r.clicks+=cl; r.conv+=cv; if(cl>0) r.withTraf++; if(o.macro) r.ownMacro++;
+      if(last>r.last) r.last=last;
     };
     for(const o of NOFF){
       if(!teamOK(o[2])) continue;
-      const r=get(o[3],o[2]); if(!r) continue;
-      const oi=o[0], k=oi>=0?oi+"|"+o[2]:null;
-      const t=k?tr.get(k):null;
-      const cl=t?t[0]:0, cv=t?t[1]:0;
-      const last=k&&lc.has(k)?lc.get(k):-1;
-      r.offers.push({name: oi>=0 ? (D.offers[oi]||"") : o[1], st:offStatus(o), clicks:cl, conv:cv, last});
-      r.clicks+=cl; r.conv+=cv; if(cl>0) r.withTraf++; if(o[4]) r.ownMacro++;
-      if(last>r.last) r.last=last;
+      const ni=o[3];
+      const r = ni>=0 ? rows[ni] : pseudo("nonet"+o[2], o[2], "— офери без партнерки —");
+      if(!r) continue;
+      if(o[0]>=0) seen.add(o[0]+"|"+o[2]);
+      push(r,{oi:o[0], ti:o[2], name: o[0]>=0 ? (D.offers[o[0]]||"") : o[1], hints:offHints(o), macro:o[4]});
     }
+    // Офери, які є у звіті, але яких немає в довіднику /offers — найчастіше
+    // заархівовані. Їх конверсії інакше просто зникали з таблиці.
+    for(const [k,v] of tr){
+      if(seen.has(k)||v[0]<=0) continue;
+      const [oi,ti]=k.split("|").map(Number);
+      const r=pseudo("ghost"+ti, ti, "— немає в довіднику Keitaro —", 1);
+      seen.add(k);
+      push(r,{oi, ti, name:D.offers[oi]||"", hints:["офера немає в довіднику — ймовірно заархівований"], macro:0});
+    }
+
     const all=[...rows.filter(r=>teamOK(r.ti)), ...extra.values()].filter(r=>r.offers.length);
-    // проблемні — нагору, далі за обсягом
+    for(const r of all){
+      r.silent = r.conv===0 && r.clicks>=silentFloor;
+      r.state = r.conv>0 ? "ok" : (r.silent ? "silent" : "thin");
+      r.cfg = r.offers.some(o=>o.hints.length);
+    }
+    // тиша з найбільшим трафіком — нагору: саме там втрачені гроші
     all.sort((a,b)=>{
-      const pa=(!a.pb?2:(a.offers.some(o=>o.st==="noid")?1:0)), pb_=(!b.pb?2:(b.offers.some(o=>o.st==="noid")?1:0));
-      if(pa!==pb_) return pb_-pa;
+      const p=(x)=> x.state==="silent"?2:(x.state==="thin"?0:1);
+      if(p(a)!==p(b)) return p(b)-p(a);
       return b.clicks-a.clicks;
     });
-    // KPI рахуємо по всьому набору, а не по відфільтрованому — інакше
-    // «кліків повз постбек» завжди показувало б 100% у фільтрі «без постбеку»
     let shown=all;
     if(netQ){ const q=netQ.toLowerCase();
       shown=shown.filter(r=>r.name.toLowerCase().includes(q)||r.offers.some(o=>o.name.toLowerCase().includes(q))); }
-    if(netFilt==="nopb") shown=shown.filter(r=>!r.pb);
-    else if(netFilt==="noid") shown=shown.filter(r=>r.pb&&r.offers.some(o=>o.st==="noid"));
+    if(netFilt==="silent") shown=shown.filter(r=>r.state==="silent");
+    else if(netFilt==="cfg") shown=shown.filter(r=>r.cfg);
     else if(netFilt==="traf") shown=shown.filter(r=>r.clicks>0);
-    return {all, shown};
+    return {all, shown, silentFloor, cr};
   }
 
+  const NSTATE={
+    ok:    {t:"конверсії йдуть", c:"var(--good-ink)", i:"✓"},
+    silent:{t:"тиша",            c:"var(--warn)",     i:"⚠"},
+    thin:  {t:"мало трафіку",    c:"var(--faint)",    i:"·"},
+  };
+
   function renderNets(){
-    const {all:allRows, shown:rows}=netsData();
+    const {all:allRows, shown:rows, silentFloor, cr}=netsData();
     const mine=NETS.filter(n=>teamOK(n[1]));
-    const badNets=mine.filter(n=>!n[2]).length;
-    const badOff=NOFF.filter(o=>teamOK(o[2])&&(offStatus(o)==="nopb"||offStatus(o)==="nonet")).length;
-    const riskClicks=allRows.filter(r=>!r.pb).reduce((s,r)=>s+r.clicks,0);
+    const silent=allRows.filter(r=>r.state==="silent");
+    const silentClicks=silent.reduce((s,r)=>s+r.clicks,0);
     const totClicks=allRows.reduce((s,r)=>s+r.clicks,0);
+    const noUrl=mine.filter(n=>!n[2]).length;
+
     document.getElementById("netKpis").innerHTML=[
-      {lbl:"Партнерок",v:fmtInt(mine.length),c:"var(--s1)"},
-      {lbl:"Без постбеку",v:fmtInt(badNets),c:badNets?"var(--crit)":"var(--good)"},
-      {lbl:"Оферів без постбеку",v:fmtInt(badOff)+" / "+fmtInt(NOFF.filter(o=>teamOK(o[2])).length),c:badOff?"var(--crit)":"var(--good)"},
-      {lbl:"Кліків повз постбек",v:fmtInt(riskClicks),c:riskClicks?"var(--warn)":"var(--good)",
-        hint:"за вибраний період; у дужках — частка всього трафіку",
-        sub:totClicks?`${(riskClicks/totClicks*100).toFixed(1)}% трафіку за період`:""},
-    ].map(k=>`<div class="kpi" style="--accent:${k.c}"${k.hint?` title="${k.hint}"`:""}><div class="lbl">${k.lbl}</div>`+
-      `<div class="val mono">${k.v}</div>${k.sub?`<div class="dl flat">${k.sub}</div>`:""}</div>`).join("");
+      {lbl:"Партнерок",v:fmtInt(mine.length),c:"var(--s1)",sub:`${fmtInt(allRows.filter(r=>!r.virtual&&r.clicks>0).length)} з трафіком за період`},
+      {lbl:"Мереж без конверсій",v:fmtInt(silent.length),c:silent.length?"var(--warn)":"var(--good)",
+        sub:silent.length?`при трафіку, де конверсії мали б бути`:"трафік скрізь конвертить"},
+      {lbl:"Кліків у тиші",v:fmtInt(silentClicks),c:silentClicks?"var(--warn)":"var(--good)",
+        sub:totClicks?`${(silentClicks/totClicks*100).toFixed(1)}% трафіку за період`:""},
+      {lbl:"URL постбеку не заповнений",v:fmtInt(noUrl)+" / "+fmtInt(mine.length),c:"var(--dim)",
+        sub:"довідково: саме по собі це не поломка"},
+    ].map(k=>`<div class="kpi" style="--accent:${k.c}"><div class="lbl">${k.lbl}</div>`+
+      `<div class="val mono">${k.v}</div>${k.sub?`<div class="dl flat"><span class="sub">${k.sub}</span></div>`:""}</div>`).join("");
 
     const dayTxt=(i)=> i>=0 ? D.days[i].slice(8,10)+"."+D.days[i].slice(5,7) : "—";
-    const head=["Мережа","Постбек","Клік-айді","Оферів","З трафіком","Кліки","Конверсії","Остання конв."];
+    const head=["Мережа","Стан","Оферів","Кліки","Конверсії","Остання конв.","Налаштування"];
+    const cfgCell=(r)=>{
+      if(r.ghost) return `<span class="zero">—</span>`;
+      const b=[];
+      if(r.ni<0) b.push(`<span class="badge warn">без партнерки</span>`);
+      else{
+        if(!r.pb) b.push(`<span class="badge">URL —</span>`);
+        if(!r.par && r.ownMacro<r.offers.length) b.push(`<span class="badge">клік-айді —</span>`);
+      }
+      return b.length?b.join(" "):`<span class="ok">✓</span>`;
+    };
     const body=rows.map(r=>{
-      const open=netOpen.has(r.ti+"|"+r.ni);
-      const partial = r.pb && !r.par && r.ownMacro>0 && r.ownMacro<r.offers.length;
-      const idCell = !r.pb ? `<span class="zero">—</span>`
-        : (r.par ? `<span class="ok">✓</span>`
-          : (r.ownMacro ? `<span style="color:var(--gold)">${partial?`${r.ownMacro}/${r.offers.length}`:"✓ в оферах"}</span>`
-            : `<span style="color:var(--red)">⛔</span>`));
-      const main=`<tr class="netrow" tabindex="0" role="button" data-key="1" data-k="${r.ti}|${r.ni}">
+      const open=netOpen.has(r.ti+"|"+r.ni+"|"+r.name);
+      const st=NSTATE[r.state];
+      const main=`<tr class="netrow" tabindex="0" role="button" data-key="1" data-k="${esc(r.ti+"|"+r.ni+"|"+r.name)}">
         <td><span class="caret">${open?"▾":"▸"}</span> <span class="site">${esc(r.name)}</span>`+
         `${(state.team<0&&nTeams>1)?" "+teamChip(r.ti):""}</td>
-        <td>${r.pb?`<span class="ok">✓</span>`:`<span class="badge dead">немає</span>`}</td>
-        <td>${idCell}</td>
+        <td style="text-align:left;color:${st.c};font-weight:700">${st.i} ${st.t}</td>
         <td class="mono">${fmtInt(r.offers.length)}</td>
-        <td class="mono ${r.withTraf?"":"zero"}">${r.withTraf||"0"}</td>
         <td class="mono ${r.clicks?"":"zero"}">${r.clicks?fmtInt(r.clicks):"—"}</td>
         <td class="mono ${r.conv?"conv-badge":"zero"}">${r.conv||"0"}</td>
-        <td class="mono ${r.last>=0?"":"zero"}">${dayTxt(r.last)}</td></tr>`;
+        <td class="mono ${r.last>=0?"":"zero"}">${dayTxt(r.last)}</td>
+        <td style="text-align:left">${cfgCell(r)}</td></tr>`;
       if(!open) return main;
       const offs=r.offers.slice().sort((a,b)=>b.clicks-a.clicks).slice(0,200);
       const sub=offs.map(o=>{
-        const s=STAT[o.st];
+        const s=o.conv>0?NSTATE.ok:(o.silent?NSTATE.silent:NSTATE.thin);
         return `<tr class="nolink suboff"><td style="padding-left:30px">${esc(o.name)}</td>
-          <td colspan="2">${s.b?`<span class="badge ${s.b}">${s.t}</span>`:`<span class="ok">✓</span>`}</td>
-          <td colspan="2"></td>
+          <td style="text-align:left;color:${s.c}">${s.i} ${s.t}</td>
+          <td></td>
           <td class="mono ${o.clicks?"":"zero"}">${o.clicks?fmtInt(o.clicks):"—"}</td>
           <td class="mono ${o.conv?"conv-badge":"zero"}">${o.conv||"0"}</td>
-          <td class="mono ${o.last>=0?"":"zero"}">${dayTxt(o.last)}</td></tr>`;
+          <td class="mono ${o.last>=0?"":"zero"}">${dayTxt(o.last)}</td>
+          <td style="text-align:left;font-size:10.5px;color:var(--faint)">${o.hints.length?esc(o.hints.join(" · ")):"—"}</td></tr>`;
       }).join("");
-      const more=r.offers.length>200?`<tr class="nolink suboff"><td colspan="8" class="emptycell">показано 200 з ${fmtInt(r.offers.length)} оферів — звузь пошуком</td></tr>`:"";
+      const more=r.offers.length>200?`<tr class="nolink suboff"><td colspan="7" class="emptycell">показано 200 з ${fmtInt(r.offers.length)} оферів — звузь пошуком</td></tr>`:"";
       return main+sub+more;
     }).join("");
 
-    const nReal=rows.filter(r=>!r.virtual).length, nVirt=rows.length-nReal;
+    const nReal=rows.filter(r=>!r.virtual).length;
     document.getElementById("netSub").textContent =
-      `${nReal} ${plural(nReal,["мережа","мережі","мереж"])}${nVirt?` + офери без партнерки`:""} · трафік за ${state.mode==="day"?D.days[state.dayIdx]:(state.mode==="all"?"весь період":"останні "+state.mode+" дн")} · клікни по рядку, щоб побачити офери`;
+      `${nReal} ${plural(nReal,["мережа","мережі","мереж"])}${rows.length-nReal?" + офери поза мережами":""} · `+
+      `трафік за ${state.mode==="day"?D.days[state.dayIdx]:(state.mode==="all"?"весь період":"останні "+state.mode+" дн")} · `+
+      `клікни по рядку, щоб побачити офери`;
     document.getElementById("netTbl").innerHTML=
-      `<thead><tr>${head.map(h=>`<th>${h}</th>`).join("")}</tr></thead>`+
-      `<tbody>${body||`<tr class="nolink"><td colspan="8" class="emptycell">Нічого не знайдено.</td></tr>`}</tbody>`;
+      `<thead><tr>${head.map((h,i)=>`<th${i===1||i===6?' style="text-align:left"':""}>${h}</th>`).join("")}</tr></thead>`+
+      `<tbody>${body||`<tr class="nolink"><td colspan="7" class="emptycell">Нічого не знайдено.</td></tr>`}</tbody>`;
+    document.getElementById("netFoot").innerHTML =
+      `<b>Стан</b> рахується з реальності: «тиша» — це нуль конверсій при трафіку, де їх мало б бути щонайменше три `+
+      `(за середньою конверсійністю ${(cr*100).toFixed(2)}% це від ${fmtInt(silentFloor)} кліків). `+
+      `<b>Налаштування</b> — лише підказка: порожній URL постбеку в картці мережі сам по собі не ламає постбеки, `+
+      `бо мережа звертається на адресу трекера. Якщо конверсії йдуть — усе працює, хоч поле й порожнє.`;
+
     document.querySelectorAll("#netTbl .netrow").forEach(tr=>tr.onclick=()=>{
       const k=tr.dataset.k; if(netOpen.has(k)) netOpen.delete(k); else netOpen.add(k); renderNets();
     });
   }
-
   function render(){
     setRange(); renderChip();
     const f=state.filter;
