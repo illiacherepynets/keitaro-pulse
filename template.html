@@ -121,7 +121,7 @@
   /* min-width:0 — інакше таблиця з nowrap розпирає свою колонку і всю сторінку */
   .grid>*,.lead>*,.tiles>*,.panel,.tbl-wrap{min-width:0}
   .g2{grid-template-columns:1fr 1fr}
-  .g3{grid-template-columns:2fr 1fr}
+  .g3{grid-template-columns:2fr 1fr;align-items:start}
   @media(max-width:1050px){.g2,.g3{grid-template-columns:1fr}}
   .panel{background:var(--panel);backdrop-filter:blur(10px);border:1px solid var(--border);border-radius:var(--radius);padding:17px 18px}
   .panel h2{font-size:13.5px;margin:0;font-weight:700;letter-spacing:.2px}
@@ -228,6 +228,63 @@
   .badge.dead{color:var(--crit-ink);border-color:rgba(242,86,91,.32);background:rgba(242,86,91,.1)}
   .badge.warn{color:var(--warn);border-color:rgba(251,179,21,.32);background:rgba(251,179,21,.1)}
   .mvempty{font-size:12px;color:var(--faint);padding:12px 2px}
+
+  /* підсумковий рядок: ростемо ми взагалі чи ні */
+  .mvnet{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;font-family:var(--mono);font-size:12.5px;
+    font-weight:700;padding:10px 12px;margin-bottom:13px;border:1px solid var(--border);border-radius:10px;
+    background:rgba(19,26,41,.5)}
+  .mvnet .npart{display:inline-flex;align-items:baseline;gap:6px}
+  .mvnet .npart i{color:var(--faint);font-weight:500;font-style:normal;font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+  .mvnet .nres{margin-left:auto}
+  @media(max-width:700px){
+    .mvnet{flex-direction:column;align-items:flex-start;gap:6px}
+    .mvnet .nres{margin-left:0;padding-top:6px;border-top:1px solid var(--border);width:100%}
+  }
+
+  /* розхідні смуги від спільної нульової лінії */
+  .dvhead,.dvrow{display:grid;grid-template-columns:1.9fr 2fr .95fr .6fr 1.2fr;gap:12px;align-items:center}
+  .dvhead{font-size:9.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--faint);font-weight:700;
+    padding:0 9px 8px;border-bottom:1px solid var(--border)}
+  .dvhead>span:not(:first-child):not(.dvaxis){text-align:right}
+  .dvaxis{display:flex;justify-content:space-between;font-style:normal}
+  .dvaxis i{font-style:normal}
+  .dvlist{display:flex;flex-direction:column;gap:1px;margin-top:4px}
+  .dvrow{padding:8px 9px;border-radius:9px;cursor:pointer;transition:background .12s}
+  .dvrow:hover,.dvrow:focus-visible{background:rgba(79,157,255,.08)}
+  .dvname{font-size:12.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .dvbar{position:relative;height:9px;border-radius:3px;
+    background:linear-gradient(90deg,transparent calc(50% - .5px),var(--axis) calc(50% - .5px),
+      var(--axis) calc(50% + .5px),transparent calc(50% + .5px))}
+  .dvbar i{position:absolute;top:0;height:100%}
+  .dvbar i.pos{left:50%;background:var(--good);border-radius:0 4px 4px 0}
+  .dvbar i.neg{right:50%;background:var(--crit);border-radius:4px 0 0 4px}
+  .dvd,.dvpct,.dvflow{text-align:right;font-size:12.5px;font-weight:700;font-variant-numeric:tabular-nums}
+  .dvpct{color:var(--dim);font-weight:600}
+  .dvflow{color:var(--faint);font-weight:500;font-size:11.5px}
+  .dvsplit{display:flex;align-items:center;gap:10px;margin:9px 2px;font-size:10px;text-transform:uppercase;
+    letter-spacing:.5px;color:var(--faint);font-weight:700}
+  .dvsplit::before,.dvsplit::after{content:"";flex:1;height:1px;background:var(--border)}
+
+  /* клікають, не конвертять */
+  .nclist{display:flex;flex-direction:column;gap:3px}
+  .ncrow{display:grid;grid-template-columns:1fr auto;gap:3px 10px;padding:8px 9px;border-radius:9px;cursor:pointer;transition:background .12s}
+  .ncrow:hover,.ncrow:focus-visible{background:rgba(251,179,21,.08)}
+  .ncname{font-size:12.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ncname .chip,.dvname .chip{margin-left:4px}
+  .ncv{font-size:12.5px;font-weight:700;color:var(--warn);text-align:right;font-variant-numeric:tabular-nums}
+  .nctrack{grid-column:1/3;height:6px;background:var(--bg2);border-radius:4px;overflow:hidden}
+  .nctrack i{display:block;height:100%;background:var(--warn);border-radius:4px}
+  .ncwas{grid-column:1/3;font-size:10.5px;color:var(--faint)}
+
+  @media(max-width:1050px){
+    .dvhead,.dvrow{grid-template-columns:1.6fr 1.4fr .9fr .6fr}
+    .dvflow{display:none}
+  }
+  @media(max-width:700px){
+    .dvhead,.dvrow{grid-template-columns:1.5fr 1fr .7fr}
+    .dvbar{display:none}
+    .dvhead>span:nth-child(2){display:none}
+  }
   /* ── головний блок ─────────────────────────────────────────────────────── */
   .lead{display:grid;grid-template-columns:1.15fr 2fr;gap:16px;margin-bottom:13px}
   @media(max-width:1050px){.lead{grid-template-columns:1fr}}
@@ -454,13 +511,22 @@ function KT_boot(D){
         </div>
       </div>
 
-      <div class="grid">
+      <div class="grid g3">
         <div class="panel">
           <div class="phead">
             <div><h2>Рух брендів</h2><div class="psub" id="mvSub"></div></div>
             <div class="seg alt" id="mvSeg"><button data-k="0">Кліки</button><button data-k="1">Конверсії</button><button data-k="5">Дохід</button></div>
           </div>
-          <div class="mv" id="mv"></div>
+          <div class="mvnet" id="mvNet"></div>
+          <div class="dvhead" id="dvHead"></div>
+          <div class="dvlist" id="mv"></div>
+          <div id="mvMore"></div>
+          <div class="hint" id="mvFoot"></div>
+        </div>
+        <div class="panel">
+          <div class="phead"><div><h2>⚠ Клікають, не конвертять</h2><div class="psub" id="ncSub"></div></div></div>
+          <div class="nclist" id="ncList"></div>
+          <div class="hint">клік по рядку → фільтр на цей бренд</div>
         </div>
       </div>
 
@@ -1146,59 +1212,108 @@ function KT_boot(D){
       const t=+el.dataset.tm; selectTeam(state.team===t?-1:t);
     });
   }
+
   // ── рух брендів ────────────────────────────────────────────────────────────
+  // Два стовпці чисел не давали відчуття масштабу: не видно було, що перший
+  // рядок утричі важчий за п'ятий. Тепер один список із розхідними смугами від
+  // спільної нульової лінії — вправо зростання, вліво просідання.
+  let mvCap=8;
   function renderMovers(){
     const box=document.getElementById("mv"), sub=document.getElementById("mvSub");
-    if(!MV){ box.innerHTML=`<div class="mvempty">Замало історії, щоб порівняти два періоди.</div>`; sub.textContent=""; return; }
+    const head=document.getElementById("dvHead"), net=document.getElementById("mvNet");
+    const foot=document.getElementById("mvFoot"), more=document.getElementById("mvMore");
+    if(!MV){ box.innerHTML=`<div class="mvempty">Замало історії, щоб порівняти два періоди.</div>`;
+      sub.textContent=""; head.innerHTML=""; net.innerHTML=""; foot.textContent=""; more.innerHTML="";
+      renderNoConv(null); return; }
+
     const m=mvMetric, money=m===5;
-    const name=(r)=> esc(D.offers[r.oi]||"(без офера)")+(MV.byTeam&&r.ti!=null?" "+teamChip(r.ti):"");
+    const val=v=> money?fmtMoney(v):fmtInt(v);
     const totalCur=MV.rows.reduce((s,r)=>s+r.c[m],0);
-    const floor=Math.max(money?20:(m===1?3:30), totalCur*0.004);
+    const floor=Math.max(money?20:(m===1?3:30), totalCur*0.001);
+    const sig=MV.rows.filter(r=>Math.max(r.c[m],r.p[m])>=floor).map(r=>({r,d:r.c[m]-r.p[m]}));
+    const up=sig.filter(x=>x.d>0).sort((a,b)=>b.d-a.d);
+    const dn=sig.filter(x=>x.d<0).sort((a,b)=>a.d-b.d);
+    const su=up.slice(0,mvCap), sd=dn.slice(0,mvCap);
+    const maxAbs=Math.max(1,...[...su,...sd].map(x=>Math.abs(x.d)));
 
-    const sig=MV.rows.filter(r=>Math.max(r.c[m],r.p[m])>=floor);
-    const up=sig.filter(r=>r.c[m]>r.p[m]).sort((a,b)=>(b.c[m]-b.p[m])-(a.c[m]-a.p[m])).slice(0,9);
-    const dn=sig.filter(r=>r.c[m]<r.p[m]).sort((a,b)=>(a.c[m]-a.p[m])-(b.c[m]-b.p[m])).slice(0,9);
+    // Чистий підсумок одним рядком: ростемо ми взагалі чи ні.
+    const gain=up.reduce((s,x)=>s+x.d,0), loss=dn.reduce((s,x)=>s+x.d,0), netD=gain+loss;
+    const mName=m===0?"кліків":(m===1?"конверсій":"доходу");
+    net.innerHTML=`<span class="npart"><b class="up">▲ ${val(gain)}</b><i>додали ${up.length} ${plural(up.length,["бренд","бренди","брендів"])}</i></span>`+
+      `<span class="npart"><b class="down">▼ ${val(Math.abs(loss))}</b><i>втратили ${dn.length}</i></span>`+
+      `<span class="npart nres ${netD>0?"up":(netD<0?"down":"flat")}">підсумок ${netD>=0?"+":"−"}${val(Math.abs(netD))} ${mName}</span>`;
 
-    const clickFloor=Math.max(40, MV.rows.reduce((s,r)=>s+r.c[0],0)*0.002);
-    const nc=MV.rows.filter(r=>r.c[0]>=clickFloor && r.c[1]===0).sort((a,b)=>b.c[0]-a.c[0]).slice(0,9);
+    sub.textContent=`${MV.w.label} · за зміною ${m===0?"кліків":(m===1?"конверсій":"підтвердженого доходу")}${MV.byTeam?" · окремо по кожній команді":""}`;
+    head.innerHTML=`<span>Бренд</span><span class="dvaxis"><i>← просідання</i><i>зростання →</i></span><span>Зміна</span><span class="dvpct">%</span><span class="dvflow">було → стало</span>`;
 
     const badges=(r)=>{
       const b=[];
       if(r.p[0]===0&&r.c[0]>0) b.push(`<span class="badge new">новий</span>`);
       if(r.c[0]===0&&r.p[0]>0) b.push(`<span class="badge dead">зник</span>`);
-      if(r.c[0]>=clickFloor&&r.c[1]===0) b.push(`<span class="badge warn">0 конверсій</span>`);
       const crC=div(r.c[1],r.c[0]), crP=div(r.p[1],r.p[0]);
-      if(r.c[0]>=clickFloor&&r.p[0]>=clickFloor&&crP>0&&r.c[1]>0){
+      if(r.c[0]>=50&&r.p[0]>=50&&crP>0&&r.c[1]>0){
         if(crC>=crP*1.4) b.push(`<span class="badge new">CR ▲</span>`);
         else if(crC<=crP*0.6) b.push(`<span class="badge dead">CR ▼</span>`);
       }
-      return b.join(" ");
+      return b.length?` ${b.join(" ")}`:"";
     };
-    const val=(v)=> money?fmtMoney(v):fmtInt(v);
-    const row=(r)=>`<div class="mvrow" tabindex="0" role="button" data-key="1" data-oi="${r.oi}" data-ti="${r.ti==null?"":r.ti}">
-      <div class="mvn">${name(r)}</div>
-      <div class="mvd">${dHTML(r.c[m]-r.p[m],r.p[m],money)}</div>
-      <div class="mvs">${val(r.p[m])} → ${val(r.c[m])} ${badges(r)}</div></div>`;
-    const col=(title,cls,arr,empty)=>`<div><div class="mvh"><span class="${cls}">${title}</span><span class="n">${arr.length}</span></div>
-      ${arr.length?arr.map(row).join(""):`<div class="mvempty">${empty}</div>`}</div>`;
+    const row=(x)=>{
+      const r=x.r, pos=x.d>0, w=Math.abs(x.d)/maxAbs*50;
+      const pct=r.p[m]>0?x.d/r.p[m]*100:(x.d>0?null:0);
+      return `<div class="dvrow" tabindex="0" role="button" data-key="1" data-oi="${r.oi}" data-ti="${r.ti==null?"":r.ti}">
+        <span class="dvname">${esc(D.offers[r.oi]||"(без офера)")}${MV.byTeam&&r.ti!=null?" "+teamChip(r.ti):""}${badges(r)}</span>
+        <span class="dvbar"><i class="${pos?"pos":"neg"}" style="width:${w.toFixed(1)}%"></i></span>
+        <span class="dvd mono ${pos?"up":"down"}">${pos?"▲":"▼"} ${pos?"+":"−"}${val(Math.abs(x.d))}</span>
+        <span class="dvpct mono">${pct===null?"новий":`${pos?"+":"−"}${Math.abs(pct).toFixed(0)}%`}</span>
+        <span class="dvflow mono">${val(r.p[m])} → ${val(r.c[m])}</span></div>`;
+    };
+    const divider = (su.length&&sd.length)
+      ? `<div class="dvsplit"><span>нижче — ті, хто просідає</span></div>` : "";
+    box.innerHTML = (su.length?su.map(row).join(""):`<div class="mvempty">Нікого, хто б помітно виріс.</div>`)
+      + divider
+      + (sd.length?sd.map(row).join(""):`<div class="mvempty">Ніхто помітно не просів.</div>`);
 
-    const mName=m===0?"кліків":(m===1?"конверсій":"підтвердженого доходу");
-    sub.textContent=`${MV.w.label} · за зміною ${mName}${MV.byTeam?" · окремо по кожній команді":""}`;
-    box.innerHTML =
-      col("▲ Зростають","up",up,"Нікого, хто б помітно виріс.") +
-      col("▼ Просідають","down",dn,"Ніхто помітно не просів.") +
-      `<div><div class="mvh"><span style="color:var(--warn)">⚠ Клікають, але не конвертять</span><span class="n">${nc.length}</span></div>
-        ${nc.length?nc.map(r=>`<div class="mvrow" tabindex="0" role="button" data-key="1" data-oi="${r.oi}" data-ti="${r.ti==null?"":r.ti}">
-          <div class="mvn">${name(r)}</div><div class="mvd" style="color:var(--warn)">${fmtInt(r.c[0])}</div>
-          <div class="mvs">кліків за період · 0 конверсій ${r.p[1]>0?`<span class="badge dead">раніше ${fmtInt(r.p[1])}</span>`:""}</div></div>`).join("")
-          :`<div class="mvempty">Усі помітні бренди дають конверсії. 👌</div>`}</div>`;
+    const rest=Math.max(0,up.length-su.length)+Math.max(0,dn.length-sd.length);
+    more.innerHTML = rest ? `<button class="morebtn" type="button">показати ще ${fmtInt(Math.min(rest,24))} з ${fmtInt(rest)} ↓</button>` : "";
+    const mb=more.querySelector("button"); if(mb) mb.onclick=()=>{ mvCap+=12; renderMovers(); };
+    foot.textContent=`дрібніші за ${val(Math.round(floor))} ${m===5?"":plural(Math.round(floor),["клік","кліки","кліків"])} не показуємо — вони дають шум, а не сигнал`;
 
-    box.querySelectorAll(".mvrow").forEach(el=>el.onclick=()=>{
+    box.querySelectorAll(".dvrow").forEach(el=>el.onclick=()=>{
       const ti=el.dataset.ti; if(ti!=="") state.team=+ti;
       syncTeam(); setFilter("brand", D.offers[+el.dataset.oi]||"");
     });
+    renderNoConv(floor);
   }
 
+  // ── клікають, але не конвертять ────────────────────────────────────────────
+  // Окреме питання, тому й окрема панель. Той самий бренд у п'яти командах —
+  // це один рядок із п'ятьма мітками, а не п'ять однакових рядків.
+  function renderNoConv(){
+    const list=document.getElementById("ncList"), sub=document.getElementById("ncSub");
+    if(!MV){ list.innerHTML=`<div class="mvempty">—</div>`; sub.textContent=""; return; }
+    const cf=Math.max(40, MV.rows.reduce((s,r)=>s+r.c[0],0)*0.002);
+    const agg=new Map();
+    for(const r of MV.rows){
+      if(r.c[0]<cf||r.c[1]>0) continue;
+      const nm=D.offers[r.oi]||"(без офера)";
+      let a=agg.get(nm); if(!a){a={oi:r.oi,clicks:0,prevConv:0,teams:[]};agg.set(nm,a);}
+      a.clicks+=r.c[0]; a.prevConv+=r.p[1]; if(r.ti!=null&&!a.teams.includes(r.ti)) a.teams.push(r.ti);
+    }
+    const rows=[...agg.entries()].sort((a,b)=>b[1].clicks-a[1].clicks).slice(0,12);
+    const lost=rows.reduce((s,x)=>s+x[1].clicks,0);
+    const totalClicks=MV.rows.reduce((s,r)=>s+r.c[0],0);
+    sub.textContent = rows.length
+      ? `${fmtInt(lost)} ${plural(lost,["клік","кліки","кліків"])} у нікуди · ${(lost/Math.max(1,totalClicks)*100).toFixed(1)}% трафіку за період`
+      : "усі помітні бренди дають конверсії";
+    if(!rows.length){ list.innerHTML=`<div class="mvempty">Порожньо — і це добре. 👌</div>`; return; }
+    const max=Math.max(1,...rows.map(x=>x[1].clicks));
+    list.innerHTML=rows.map(([nm,a])=>`<div class="ncrow" tabindex="0" role="button" data-key="1" data-oi="${a.oi}">
+      <span class="ncname">${esc(nm)}${a.teams.length?" "+a.teams.slice(0,4).map(teamChip).join(" "):""}${a.teams.length>4?` <span class="chip">+${a.teams.length-4}</span>`:""}</span>
+      <span class="ncv mono">${fmtInt(a.clicks)}</span>
+      <span class="nctrack"><i style="width:${(a.clicks/max*100).toFixed(1)}%"></i></span>
+      ${a.prevConv>0?`<span class="ncwas">раніше ${fmtInt(a.prevConv)} ${plural(a.prevConv,["конверсія","конверсії","конверсій"])} — щось зламалось</span>`:`<span class="ncwas">конверсій не було й раніше</span>`}</div>`).join("");
+    list.querySelectorAll(".ncrow").forEach(el=>el.onclick=()=>setFilter("brand", D.offers[+el.dataset.oi]||""));
+  }
   // ── «що змінилось»: короткий висновок людською мовою ───────────────────────
   function renderDigest(){
     const el=document.getElementById("digest"), sub=document.getElementById("dgSub");
@@ -1425,7 +1540,7 @@ function KT_boot(D){
     const scopeTxt = f.active ? ` · ${f.type==="brand"?"бренд":"сайт"} “${esc(f.q)}”` : "";
     const rangeTxt = state.mode==="day"?`день ${D.days[state.dayIdx]}`:state.mode==="all"?"весь період":`останні ${state.mode} дн`;
     document.getElementById("chartTitle").textContent=`Трафік · ${rangeTxt}${scopeTxt}`;
-    tblCap={site:TBL_STEP,brand:TBL_STEP};
+    tblCap={site:TBL_STEP,brand:TBL_STEP}; mvCap=8;
     if(state.tab==="net"){ renderNets(); return; }
     MV=moversData();
     renderKpis(); renderDigest(); renderTeamCards(); renderMovers();
