@@ -79,6 +79,12 @@ const money = (v) => Math.round(num(v) * 100) / 100;
 // Спільні метрики (порядок фіксований — під нього завʼязаний дашборд)
 const METRICS = ["clicks", "conversions", "leads", "sales", "revenue", "sale_revenue"];
 
+// Макроси, які реально несуть клік-айді Keitaro в посиланні офера.
+// {campaign_id}, {position} тощо сюди НЕ входять — вони не дають мережі чим
+// зіставити конверсію. Нерозпізнані плейсхолдери ({yourclickid} і подібні)
+// теж не рахуються: Keitaro їх не підставляє, мережа отримає текст як є.
+const CLICKID_MACRO = /\{(subid|sub_id|click_id|clickid|external_id|visit_id|sub_id_\d+|sub\d+)\}/i;
+
 // ── Розбір назви кампанії: префікс (мережа) / гео ────────────────────────────
 const GEOS = new Set(("IT NL DE FR BE UK GB PL FI HU MY DK ES PT SE NO AT CH IE CA AU US " +
   "JP IN BR MX CL CO AR RU UA TR GR RO CZ SK BG HR SI LT LV EE NZ ZA SG TH VN PH ID KR " +
@@ -158,19 +164,24 @@ async function main() {
     let dayRows;
     try { dayRows = await cl.report(["day"], searchFrom, toDay, [...METRICS, "cost"]); }
     catch (e) { log(`  ✖ пропускаю команду (${redact(e.message)})`); raw.push(null); continue; }
-    if (!dayRows.length) { log("  (немає даних у діапазоні)"); raw.push({ dayRows: [], cdRaw: [], odRaw: [], relRaw: [], osRaw: [], nameById: new Map() }); continue; }
+    if (!dayRows.length) { log("  (немає даних у діапазоні)"); raw.push({ dayRows: [], cdRaw: [], odRaw: [], relRaw: [], osRaw: [], nameById: new Map(), netsRaw: [], offersRaw: [] }); continue; }
     const tDays = [...new Set(dayRows.map((r) => r.day))].sort();
     const from = tDays[0], to = tDays[tDays.length - 1];
     log(`  історія: ${tDays.length} дн. (${from} … ${to})`);
     const chunks = monthChunks(from, to);
     const nameById = new Map();
     try { for (const c of await cl.apiGet("/campaigns")) if (c && c.id != null) nameById.set(c.id, c.name); } catch (e) {}
+    // Довідники для вкладки «Партнерки». Не критичні: якщо впадуть —
+    // решта звіту має зібратись як раніше.
+    let netsRaw = [], offersRaw = [];
+    try { netsRaw = await cl.apiGet("/affiliate_networks"); } catch (e) { log(`  ⚠ мережі недоступні (${redact(e.message)})`); }
+    try { offersRaw = await cl.apiGet("/offers"); } catch (e) { log(`  ⚠ довідник оферів недоступний (${redact(e.message)})`); }
     const cdRaw = await cl.reportOverChunks(["day", "campaign"], chunks, METRICS);
     const odRaw = await cl.reportOverChunks(["day", "offer"], chunks, METRICS);
     const relRaw = await cl.reportOverChunks(["campaign", "offer", "sub_id_2", "sub_id_3"], chunks, METRICS);
     const osRaw = await cl.report(["os"], from, to, ["clicks", "conversions", "revenue"]);
     log(`  cd:${cdRaw.length} · od:${odRaw.length} · rel:${relRaw.length}`);
-    raw.push({ dayRows, cdRaw, odRaw, relRaw, osRaw, nameById });
+    raw.push({ dayRows, cdRaw, odRaw, relRaw, osRaw, nameById, netsRaw, offersRaw });
   }
 
   // ── 2) Обʼєднуємо: спільний список днів ────────────────────────────────────
@@ -231,6 +242,34 @@ async function main() {
   });
   const rel = [...relAgg.values()].map((a) => [a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], Math.round(a[8] * 100) / 100, Math.round(a[9] * 100) / 100]);
 
+  // ── Партнерські мережі та офери (довідник, не трафік) ────────────────────
+  // nets: [назва, команда, є postback_url, є offer_param, скільки оферів]
+  // noff: [oi в offers або -1, назва (лише якщо oi<0), команда, netIdx, свій макрос]
+  const nets = [], noff = [];
+  raw.forEach((r, ti) => {
+    if (!r) return;
+    const netIdx = new Map();                       // id мережі в Keitaro → індекс у nets
+    for (const n of r.netsRaw || []) {
+      if (!n || n.id == null) continue;
+      netIdx.set(n.id, nets.length);
+      nets.push([String(n.name || "(без назви)"),
+        ti,
+        String(n.postback_url || "").trim() ? 1 : 0,
+        String(n.offer_param || "").trim() ? 1 : 0,
+        0]);
+    }
+    for (const o of r.offersRaw || []) {
+      if (!o || !o.name) continue;
+      const ni = netIdx.has(o.affiliate_network_id) ? netIdx.get(o.affiliate_network_id) : -1;
+      if (ni >= 0) nets[ni][4]++;
+      const oi = offSlot.has(o.name) ? offSlot.get(o.name) : -1;
+      noff.push([oi, oi >= 0 ? "" : String(o.name), ti, ni,
+        CLICKID_MACRO.test(String(o.action_payload || "")) ? 1 : 0]);
+    }
+  });
+  const netsBad = nets.filter((n) => !n[2]).length;
+  log(`Партнерок: ${nets.length} (без постбеку: ${netsBad}) · оферів у довіднику: ${noff.length}`);
+
   // ОС по кожній команді окремо
   const os = raw.map((r) => r
     ? r.osRaw.map((x) => [x.os || "—", num(x.clicks), num(x.conversions), money(x.revenue)]).sort((a, b) => b[1] - a[1])
@@ -239,7 +278,7 @@ async function main() {
   const DATA = {
     generated: new Date().toLocaleString("uk-UA", { timeZone: TZ }),
     range: { from: fromDay, to: lastDay },
-    teams, days, totals, camps, cd, offers, od, os, rel, positions, pages,
+    teams, days, totals, camps, cd, offers, od, os, rel, positions, pages, nets, noff,
   };
 
   const template = await readFile(join(__dir, "template.html"), "utf8");

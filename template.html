@@ -45,7 +45,7 @@
     box-shadow:0 0 22px rgba(79,157,255,.4)}
   .brand h1{font-size:16px;margin:0;font-weight:700;letter-spacing:.2px}
   .brand .sub{font-size:11.5px;color:var(--dim);margin-top:1px}
-  .meta{font-size:11px;color:var(--faint);text-align:right;line-height:1.5}
+  .meta{font-size:11px;color:var(--faint);text-align:right;line-height:1.5;margin-left:auto}
   .meta b{color:var(--dim);font-weight:600}
 
   .seg{display:inline-flex;background:var(--panel-solid);border:1px solid var(--border);border-radius:10px;padding:3px;gap:2px}
@@ -188,6 +188,10 @@
   .badge.dead{color:var(--red);border-color:rgba(242,86,91,.32);background:rgba(242,86,91,.1)}
   .badge.warn{color:var(--gold);border-color:rgba(244,183,61,.32);background:rgba(244,183,61,.1)}
   .mvempty{font-size:12px;color:var(--faint);padding:12px 2px}
+  .caret{color:var(--faint);font-size:10px;display:inline-block;width:10px}
+  .ok{color:var(--green);font-weight:700}
+  tr.netrow{cursor:pointer}
+  tr.suboff td{background:rgba(10,14,24,.45);font-size:12px;color:var(--dim);border-bottom-color:rgba(72,88,124,.16)}
 </style>
 </head>
 <body>
@@ -223,7 +227,7 @@ function KT_boot(D){
 
   // ── state ──────────────────────────────────────────────────────────────────
   const state = {
-    mode:"all", fromIdx:0, toIdx:N-1, dayIdx:N-1, selectedPage:null, team:-1,  // team: -1 = усі
+    tab:"ov", mode:"all", fromIdx:0, toIdx:N-1, dayIdx:N-1, selectedPage:null, team:-1,  // team: -1 = усі
     filter:{ type:"site", match:"partial", q:"", active:false, campSet:null, offerSet:null }
   };
   const teamOK = (t)=> state.team<0 || t===state.team;
@@ -299,6 +303,7 @@ function KT_boot(D){
       <div class="hrow">
         <div class="brand"><div class="logo">K</div>
           <div><h1>Keitaro · Pulse</h1><div class="sub">Локальна аналітика трафіку по днях</div></div></div>
+        <div class="seg" id="tabSeg"><button data-tab="ov">Огляд</button><button data-tab="net">Партнерки</button></div>
         <div class="seg tm" id="teamSeg" style="display:none"></div>
         <div class="seg" id="rangeSeg">
           <button data-m="all">Весь період</button><button data-m="90">90 дн</button>
@@ -308,7 +313,7 @@ function KT_boot(D){
         <div class="meta"><div>історія: <b>${D.range.from}</b> → <b>${D.range.to}</b></div>
           <div>оновлено: <b>${D.generated}</b></div></div>
       </div>
-      <div class="hrow">
+      <div class="hrow" id="filterRow">
         <span class="flabel">Фільтр</span>
         <div class="seg" id="fType"><button data-t="site">Сайт</button><button data-t="brand">Бренд</button></div>
         <div class="seg alt" id="fMatch"><button data-x="partial">Частковий</button><button data-x="exact">Точний</button></div>
@@ -317,6 +322,7 @@ function KT_boot(D){
       </div>
     </header>
     <main>
+      <div id="tabOv">
       <div class="kpis" id="kpis"></div>
 
       <div class="tcards" id="tcards"></div>
@@ -398,6 +404,27 @@ function KT_boot(D){
         </div>
       </div>
 
+      </div>
+
+      <div id="tabNet" style="display:none">
+        <div class="kpis" id="netKpis"></div>
+        <div class="grid">
+          <div class="panel">
+            <div class="phead">
+              <div><h2>Партнерські мережі</h2><div class="psub" id="netSub"></div></div>
+              <div class="tools">
+                <div class="seg alt" id="netFilt"><button data-f="all">Усі</button><button data-f="nopb">Без постбеку</button><button data-f="noid">Без клік-айді</button><button data-f="traf">З трафіком</button></div>
+                <input class="search" id="netSearch" placeholder="мережа або офер…">
+              </div>
+            </div>
+            <div class="tbl-wrap" style="max-height:none"><table id="netTbl"></table></div>
+            <div class="hint">«Постбек» — чи заповнено URL постбеку в налаштуваннях мережі в Keitaro.
+              «Клік-айді» — чи передається ідентифікатор кліка (offer_param мережі або макрос у посиланні офера);
+              без нього мережа не має чим зіставити конверсію. Колонки трафіку — реальність за вибраний період.</div>
+          </div>
+        </div>
+      </div>
+
       <div class="foot">Keitaro · Pulse — згенеровано локально з report/build · ${N} днів історії · ${D.rel.length} звʼязок бренд↔сайт↔сторінка</div>
     </main>`;
 
@@ -418,6 +445,22 @@ function KT_boot(D){
     teamSeg.innerHTML=`<button data-tm="-1">Всі команди</button>`+D.teams.map((t,i)=>`<button data-tm="${i}">${esc(t)}</button>`).join("");
     teamSeg.addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b)return; state.team=+b.dataset.tm; state.selectedPage=null; syncTeam(); computeFilter(); render(); });
   }
+
+  const tabSeg=document.getElementById("tabSeg");
+  function syncTab(){
+    [...tabSeg.children].forEach(b=>b.classList.toggle("on",b.dataset.tab===state.tab));
+    document.getElementById("tabOv").style.display  = state.tab==="ov"?"":"none";
+    document.getElementById("tabNet").style.display = state.tab==="net"?"":"none";
+    document.getElementById("filterRow").style.display = state.tab==="ov"?"":"none";
+  }
+  tabSeg.addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b||b.dataset.tab===state.tab)return;
+    state.tab=b.dataset.tab; syncTab(); render(); });
+
+  const netFiltSeg=document.getElementById("netFilt"), netSearchEl=document.getElementById("netSearch");
+  function syncNetFilt(){ [...netFiltSeg.children].forEach(b=>b.classList.toggle("on",b.dataset.f===netFilt)); }
+  netFiltSeg.addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b)return; netFilt=b.dataset.f; syncNetFilt(); renderNets(); });
+  let netTimer=null;
+  netSearchEl.addEventListener("input",e=>{ netQ=e.target.value.trim(); clearTimeout(netTimer); netTimer=setTimeout(renderNets,180); });
 
   function selectTeam(t){ state.team=t; state.selectedPage=null; syncTeam(); computeFilter(); render(); }
 
@@ -984,12 +1027,156 @@ function KT_boot(D){
     el.querySelectorAll(".q").forEach(s=>s.onclick=()=>setFilter("brand",s.dataset.b));
   }
 
+  // ── вкладка «Партнерки» ────────────────────────────────────────────────────
+  // Статус постбеку по оферу визначаємо з довідників Keitaro:
+  //   немає мережі            → постбек неможливий;
+  //   у мережі порожній URL   → постбек не налаштований;
+  //   є URL, але ні offer_param у мережі, ні макросу в посиланні офера
+  //                           → клік-айді не передається, конверсію нема з чим зіставити;
+  //   інакше                  → налаштовано.
+  // Колонки трафіку — це вже реальність: чи приходять конверсії насправді.
+  const NETS = D.nets || [], NOFF = D.noff || [];
+  const netOpen = new Set();
+  let netFilt = "all", netQ = "";
+  let lastConvCache = null;
+
+  function lastConvByOffer(){           // (oi|ti) → індекс останнього дня з конверсією
+    if(lastConvCache) return lastConvCache;
+    const m=new Map();
+    for(const r of D.od){ if(r[3]<=0) continue; const k=r[1]+"|"+r[8];
+      const v=m.get(k); if(v===undefined||r[0]>v) m.set(k,r[0]); }
+    return (lastConvCache=m);
+  }
+
+  function offStatus(o){                // o = рядок noff
+    const ni=o[3]; if(ni<0) return "nonet";
+    const n=NETS[ni]; if(!n) return "nonet";
+    if(!n[2]) return "nopb";
+    if(!n[3] && !o[4]) return "noid";
+    return "ok";
+  }
+  const STAT={
+    ok:   {t:"налаштовано", c:"var(--green)", b:""},
+    noid: {t:"без клік-айді", c:"var(--gold)", b:"warn"},
+    nopb: {t:"без постбеку", c:"var(--red)", b:"dead"},
+    nonet:{t:"без партнерки", c:"var(--red)", b:"dead"},
+  };
+
+  function netsData(){
+    const from=state.fromIdx, to=state.toIdx;
+    // трафік за вибраний період по парі офер×команда
+    const tr=new Map();
+    for(const r of D.od){ const di=r[0]; if(di<from||di>to) continue;
+      const k=r[1]+"|"+r[8]; let a=tr.get(k); if(!a){a=[0,0];tr.set(k,a);} a[0]+=r[2]; a[1]+=r[3]; }
+    const lc=lastConvByOffer();
+
+    // псевдо-мережа «без партнерки» — своя на кожну команду
+    const extra=new Map();
+    const rows=NETS.map((n,i)=>({ni:i,name:n[0],ti:n[1],pb:n[2],par:n[3],offers:[],clicks:0,conv:0,withTraf:0,ownMacro:0,last:-1}));
+    const get=(ni,ti)=>{
+      if(ni>=0) return rows[ni];
+      const k="x"+ti; let r=extra.get(k);
+      if(!r){ r={ni:-1,name:"— без партнерки —",ti,pb:0,par:0,offers:[],clicks:0,conv:0,withTraf:0,ownMacro:0,last:-1,virtual:1}; extra.set(k,r); }
+      return r;
+    };
+    for(const o of NOFF){
+      if(!teamOK(o[2])) continue;
+      const r=get(o[3],o[2]); if(!r) continue;
+      const oi=o[0], k=oi>=0?oi+"|"+o[2]:null;
+      const t=k?tr.get(k):null;
+      const cl=t?t[0]:0, cv=t?t[1]:0;
+      const last=k&&lc.has(k)?lc.get(k):-1;
+      r.offers.push({name: oi>=0 ? (D.offers[oi]||"") : o[1], st:offStatus(o), clicks:cl, conv:cv, last});
+      r.clicks+=cl; r.conv+=cv; if(cl>0) r.withTraf++; if(o[4]) r.ownMacro++;
+      if(last>r.last) r.last=last;
+    }
+    const all=[...rows.filter(r=>teamOK(r.ti)), ...extra.values()].filter(r=>r.offers.length);
+    // проблемні — нагору, далі за обсягом
+    all.sort((a,b)=>{
+      const pa=(!a.pb?2:(a.offers.some(o=>o.st==="noid")?1:0)), pb_=(!b.pb?2:(b.offers.some(o=>o.st==="noid")?1:0));
+      if(pa!==pb_) return pb_-pa;
+      return b.clicks-a.clicks;
+    });
+    // KPI рахуємо по всьому набору, а не по відфільтрованому — інакше
+    // «кліків повз постбек» завжди показувало б 100% у фільтрі «без постбеку»
+    let shown=all;
+    if(netQ){ const q=netQ.toLowerCase();
+      shown=shown.filter(r=>r.name.toLowerCase().includes(q)||r.offers.some(o=>o.name.toLowerCase().includes(q))); }
+    if(netFilt==="nopb") shown=shown.filter(r=>!r.pb);
+    else if(netFilt==="noid") shown=shown.filter(r=>r.pb&&r.offers.some(o=>o.st==="noid"));
+    else if(netFilt==="traf") shown=shown.filter(r=>r.clicks>0);
+    return {all, shown};
+  }
+
+  function renderNets(){
+    const {all:allRows, shown:rows}=netsData();
+    const mine=NETS.filter(n=>teamOK(n[1]));
+    const badNets=mine.filter(n=>!n[2]).length;
+    const badOff=NOFF.filter(o=>teamOK(o[2])&&(offStatus(o)==="nopb"||offStatus(o)==="nonet")).length;
+    const riskClicks=allRows.filter(r=>!r.pb).reduce((s,r)=>s+r.clicks,0);
+    const totClicks=allRows.reduce((s,r)=>s+r.clicks,0);
+    document.getElementById("netKpis").innerHTML=[
+      {lbl:"Партнерок",v:fmtInt(mine.length),c:"var(--blue)"},
+      {lbl:"Без постбеку",v:fmtInt(badNets),c:badNets?"var(--red)":"var(--green)"},
+      {lbl:"Оферів без постбеку",v:fmtInt(badOff)+" / "+fmtInt(NOFF.filter(o=>teamOK(o[2])).length),c:badOff?"var(--red)":"var(--green)"},
+      {lbl:"Кліків повз постбек",v:fmtInt(riskClicks),c:riskClicks?"var(--gold)":"var(--green)",
+        hint:"за вибраний період; у дужках — частка всього трафіку",
+        sub:totClicks?`${(riskClicks/totClicks*100).toFixed(1)}% трафіку за період`:""},
+    ].map(k=>`<div class="kpi" style="--accent:${k.c}"${k.hint?` title="${k.hint}"`:""}><div class="lbl">${k.lbl}</div>`+
+      `<div class="val mono">${k.v}</div>${k.sub?`<div class="dl flat">${k.sub}</div>`:""}</div>`).join("");
+
+    const dayTxt=(i)=> i>=0 ? D.days[i].slice(8,10)+"."+D.days[i].slice(5,7) : "—";
+    const head=["Мережа","Постбек","Клік-айді","Оферів","З трафіком","Кліки","Конверсії","Остання конв."];
+    const body=rows.map(r=>{
+      const open=netOpen.has(r.ti+"|"+r.ni);
+      const partial = r.pb && !r.par && r.ownMacro>0 && r.ownMacro<r.offers.length;
+      const idCell = !r.pb ? `<span class="zero">—</span>`
+        : (r.par ? `<span class="ok">✓</span>`
+          : (r.ownMacro ? `<span style="color:var(--gold)">${partial?`${r.ownMacro}/${r.offers.length}`:"✓ в оферах"}</span>`
+            : `<span style="color:var(--red)">⛔</span>`));
+      const main=`<tr class="netrow" data-k="${r.ti}|${r.ni}">
+        <td><span class="caret">${open?"▾":"▸"}</span> <span class="site">${esc(r.name)}</span>`+
+        `${(state.team<0&&nTeams>1)?` <span class="chip tm" title="${esc(D.teams[r.ti]||"")}">${teamShort(r.ti)}</span>`:""}</td>
+        <td>${r.pb?`<span class="ok">✓</span>`:`<span class="badge dead">немає</span>`}</td>
+        <td>${idCell}</td>
+        <td class="mono">${fmtInt(r.offers.length)}</td>
+        <td class="mono ${r.withTraf?"":"zero"}">${r.withTraf||"0"}</td>
+        <td class="mono ${r.clicks?"":"zero"}">${r.clicks?fmtInt(r.clicks):"—"}</td>
+        <td class="mono ${r.conv?"conv-badge":"zero"}">${r.conv||"0"}</td>
+        <td class="mono ${r.last>=0?"":"zero"}">${dayTxt(r.last)}</td></tr>`;
+      if(!open) return main;
+      const offs=r.offers.slice().sort((a,b)=>b.clicks-a.clicks).slice(0,200);
+      const sub=offs.map(o=>{
+        const s=STAT[o.st];
+        return `<tr class="nolink suboff"><td style="padding-left:30px">${esc(o.name)}</td>
+          <td colspan="2">${s.b?`<span class="badge ${s.b}">${s.t}</span>`:`<span class="ok">✓</span>`}</td>
+          <td colspan="2"></td>
+          <td class="mono ${o.clicks?"":"zero"}">${o.clicks?fmtInt(o.clicks):"—"}</td>
+          <td class="mono ${o.conv?"conv-badge":"zero"}">${o.conv||"0"}</td>
+          <td class="mono ${o.last>=0?"":"zero"}">${dayTxt(o.last)}</td></tr>`;
+      }).join("");
+      const more=r.offers.length>200?`<tr class="nolink suboff"><td colspan="8" class="emptycell">показано 200 з ${fmtInt(r.offers.length)} оферів — звузь пошуком</td></tr>`:"";
+      return main+sub+more;
+    }).join("");
+
+    const nReal=rows.filter(r=>!r.virtual).length, nVirt=rows.length-nReal;
+    document.getElementById("netSub").textContent =
+      `${nReal} ${plural(nReal,["мережа","мережі","мереж"])}${nVirt?` + офери без партнерки`:""} · трафік за ${state.mode==="day"?D.days[state.dayIdx]:(state.mode==="all"?"весь період":"останні "+state.mode+" дн")} · клікни по рядку, щоб побачити офери`;
+    document.getElementById("netTbl").innerHTML=
+      `<thead><tr>${head.map(h=>`<th>${h}</th>`).join("")}</tr></thead>`+
+      `<tbody>${body||`<tr class="nolink"><td colspan="8" class="emptycell">Нічого не знайдено.</td></tr>`}</tbody>`;
+    document.querySelectorAll("#netTbl .netrow").forEach(tr=>tr.onclick=()=>{
+      const k=tr.dataset.k; if(netOpen.has(k)) netOpen.delete(k); else netOpen.add(k); renderNets();
+    });
+  }
+
   function render(){
     setRange(); renderChip();
     const f=state.filter;
     const scopeTxt = f.active ? ` · ${f.type==="brand"?"бренд":"сайт"} “${esc(f.q)}”` : "";
     const rangeTxt = state.mode==="day"?`день ${D.days[state.dayIdx]}`:state.mode==="all"?"весь період":`останні ${state.mode} дн`;
     document.getElementById("chartTitle").textContent=`Трафік · ${rangeTxt}${scopeTxt}`;
+    if(state.tab==="net"){ renderNets(); return; }
     MV=moversData();
     renderKpis(); renderTeamCards(); renderDigest(); renderMovers();
     renderChart(); renderSites(); renderBrands(); renderPosPages(); renderConv(); renderGeo(); renderPrefOs();
@@ -1005,10 +1192,11 @@ function KT_boot(D){
       else { state.filter.type=m[1]; state.filter.match="partial"; state.filter.q=m[2]; fq.value=m[2]; }
     });
     const tm=h.match(/(?:^|;)team:(\d+)/); if(tm){ const t=+tm[1]; if(t>=0&&t<nTeams) state.team=t; }
+    if(/(?:^|;)tab:net/.test(h)) state.tab="net";
     if(state.filter.q) computeFilter();
   })();
 
-  syncSeg(); syncFilterUI(); syncTeam(); syncMv(); render();
+  syncSeg(); syncFilterUI(); syncTeam(); syncMv(); syncTab(); syncNetFilt(); render();
 }
 </script>
 <script>
