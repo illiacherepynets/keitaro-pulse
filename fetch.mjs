@@ -27,6 +27,12 @@ const INCLUDE_TODAY = false;        // false = лише завершені дн�
 //   Якщо ні → дані вшиваються напряму (локальний подвійний клік).
 // ────────────────────────────────────────────────────────────────────────────
 
+// Відображувані назви команд. Порядок = порядок команд у KT_TEAMS.
+// Тримаємо їх тут, а не в секреті: перейменувати можна одним комітом, не
+// перевводячи URL та API-ключі, де одна помилка ламає всю збірку.
+// Порожній рядок або відсутній елемент → лишається назва з KT_TEAMS.
+const TEAM_NAMES = ["Folders", "Drop domains", "Monobrands", "Asia", "Italy"];
+
 const __dir = dirname(fileURLToPath(import.meta.url));
 
 async function loadConfig() {
@@ -133,6 +139,7 @@ function makeClient(url, key) {
 async function main() {
   const t0 = Date.now();
   const { teams: TEAMS, password: PASSWORD } = await loadConfig();
+  TEAMS.forEach((t, i) => { if (TEAM_NAMES[i]) t.name = TEAM_NAMES[i]; });
   SECRET_HOSTS = TEAMS.map((t) => { try { return new URL(t.url).hostname; } catch { return ""; } }).filter(Boolean);
   const fmtDayTz = (d) => d.toLocaleDateString("en-CA", { timeZone: TZ }); // YYYY-MM-DD у TZ
   const now = new Date();

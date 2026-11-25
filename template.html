@@ -169,7 +169,15 @@ function KT_boot(D){
   const div = (a,b)=> b>0 ? a/b : 0;
   const esc = s => String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
   const cmp = (a,b)=> typeof a==="string" ? (a<b?-1:a>b?1:0) : (a||0)-(b||0);
-  const teamShort = (i)=>{ const n=(D.teams&&D.teams[i])||""; const m=n.match(/(\d+)\s*$/); return m?("К"+m[1]):n.slice(0,6); };
+  // Коротка мітка команди в таблиці сайтів. "Команда 1" → "К1"; для назв без
+  // номера беремо ПЕРШЕ СЛОВО, а не перші 6 символів — інакше "Drop domains"
+  // ставало "Drop d", обрізаним посеред слова. Повна назва є в title.
+  const teamShort = (i)=>{
+    const n=(D.teams&&D.teams[i])||"";
+    const m=n.match(/(\d+)\s*$/); if(m) return "К"+m[1];
+    const w=(n.trim().split(/\s+/)[0]||n);
+    return w.length<=10 ? w : w.slice(0,9)+"…";
+  };
 
   const campTeam = D.camps.map(c=>c[4]);   // campIdx → teamIdx
   const nTeams = (D.teams||["—"]).length;
