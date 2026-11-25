@@ -112,24 +112,56 @@ function monthChunks(fromDay, toDay) {
   return chunks;
 }
 
+// ── HTTP із таймаутом і повтором ─────────────────────────────────────────────
+// Без таймауту інстанс, який приймає з'єднання і мовчить, вішав увесь прогін
+// до 6-годинного ліміту GitHub — саме так збірка «підвисала».
+const REQ_TIMEOUT_MS = 90_000;
+const REQ_RETRIES = 2;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function request(url, init, label) {
+  let last;
+  for (let attempt = 0; attempt <= REQ_RETRIES; attempt++) {
+    try {
+      const res = await fetch(url, { ...init, signal: AbortSignal.timeout(REQ_TIMEOUT_MS) });
+      // Повторюємо лише те, що має шанс минути саме собою: 5xx і 429.
+      if (res.status >= 500 || res.status === 429) {
+        last = new Error(`${label} → HTTP ${res.status}`);
+        if (attempt < REQ_RETRIES) { await sleep(2000 * (attempt + 1)); continue; }
+        throw last;
+      }
+      return res;
+    } catch (e) {
+      last = e;
+      const retriable = e.name === "TimeoutError" || e.name === "AbortError" ||
+        e.code === "ECONNRESET" || e.code === "ETIMEDOUT" || e.code === "ENOTFOUND" ||
+        /HTTP (5\d\d|429)/.test(String(e.message));
+      if (!retriable || attempt === REQ_RETRIES) throw last;
+      log(`  ⟳ ${label}: ${redact(String(e.message)).slice(0, 80)} — повтор ${attempt + 1}/${REQ_RETRIES}`);
+      await sleep(2000 * (attempt + 1));
+    }
+  }
+  throw last;
+}
+
 // ── Клієнт одного Keitaro-інстансу ───────────────────────────────────────────
 function makeClient(url, key) {
   const API = url.replace(/\/+$/, "") + "/admin_api/v1";
   const headers = { "Api-Key": key, "Content-Type": "application/json" };
   async function report(grouping, from, to, metrics) {
-    const res = await fetch(API + "/report/build", {
+    const res = await request(API + "/report/build", {
       method: "POST", headers,
       body: JSON.stringify({
         range: { from: from + " 00:00:00", to: to + " 23:59:59", timezone: TZ },
         grouping, metrics, filters: [], sort: [], summary: false, limit: 100000, offset: 0,
       }),
-    });
+    }, `report ${grouping.join("+")}`);
     if (!res.ok) throw new Error(`report ${grouping.join("+")} → ${res.status}: ${(await res.text()).slice(0, 200)}`);
     const j = await res.json();
     return Array.isArray(j) ? j : (j.rows || []);
   }
   async function apiGet(path) {
-    const res = await fetch(API + path, { headers });
+    const res = await request(API + path, { headers }, `GET ${path}`);
     if (!res.ok) throw new Error(`GET ${path} → ${res.status}`);
     const j = await res.json();
     return Array.isArray(j) ? j : (j.rows || []);
@@ -277,6 +309,7 @@ async function main() {
 
   const DATA = {
     generated: new Date().toLocaleString("uk-UA", { timeZone: TZ }),
+    builtAt: new Date().toISOString(),   // машинна мітка: скільки даним годин
     range: { from: fromDay, to: lastDay },
     teams, days, totals, camps, cd, offers, od, os, rel, positions, pages, nets, noff,
   };

@@ -63,6 +63,9 @@
     /* смуга прокручується — але вкладки лишаються прибитими до лівого краю,
        інакше після тапу по «30 дн» не видно, на якій ти вкладці */
     #tabSeg{position:sticky;left:0;z-index:2;background:var(--bg);box-shadow:8px 0 12px -8px rgba(0,0,0,.8)}
+    /* кнопка оновлення теж лишається на видноті — по неї тягнуться саме тоді,
+       коли дані застрягли, і шукати її прокруткою було б знущанням */
+    #refreshBtn{position:sticky;right:0;z-index:2;box-shadow:-8px 0 12px -8px rgba(0,0,0,.8)}
     .brand{margin-right:4px}
     main .phead{flex-direction:column;align-items:flex-start;gap:10px}
     main .phead .tools,main .phead .seg{width:100%}
@@ -336,6 +339,41 @@
   :focus-visible{outline:2px solid var(--s1);outline-offset:2px;border-radius:7px}
   .trow:focus-visible,.dvrow:focus-visible,.ncrow:focus-visible,.netrow:focus-visible{background:rgba(79,157,255,.1)}
 
+  /* ── ручне оновлення ───────────────────────────────────────────────────── */
+  .refresh{display:inline-flex;align-items:center;gap:7px;background:var(--panel-solid);border:1px solid var(--border);
+    border-radius:10px;padding:6px 11px;color:var(--dim);font:inherit;font-size:12px;font-weight:600;cursor:pointer;
+    flex-shrink:0;transition:color .12s,border-color .12s}
+  .refresh:hover{color:var(--fg);border-color:var(--border-hi)}
+  .refresh.stale{color:var(--warn);border-color:rgba(251,179,21,.42)}
+  .refresh.old{color:var(--crit-ink);border-color:rgba(242,86,91,.48)}
+  .refresh .rico{font-size:13px;line-height:1;display:inline-block}
+  .refresh.busy .rico{animation:ktspin 1s linear infinite}
+  @keyframes ktspin{to{transform:rotate(360deg)}}
+
+  .modal{position:fixed;inset:0;z-index:60;background:rgba(6,9,16,.74);backdrop-filter:blur(4px);
+    display:flex;align-items:center;justify-content:center;padding:20px}
+  .modal[hidden]{display:none}
+  .mbox{background:var(--panel-solid);border:1px solid var(--border-hi);border-radius:16px;max-width:580px;width:100%;
+    box-shadow:0 24px 60px rgba(0,0,0,.6);max-height:88vh;overflow:auto}
+  .mhead{display:flex;justify-content:space-between;align-items:center;padding:18px 20px 10px;gap:10px}
+  .mhead h3{margin:0;font-size:16px;font-weight:700}
+  .mx{background:transparent;border:0;color:var(--dim);font-size:15px;cursor:pointer;padding:4px 9px;border-radius:7px}
+  .mx:hover{color:var(--fg);background:var(--bg2)}
+  .mbody{padding:0 20px 20px;font-size:13px;line-height:1.65;color:var(--dim)}
+  .mbody p{margin:0 0 12px}
+  .mbody b{color:var(--fg);font-weight:600}
+  .mbtn{display:inline-flex;align-items:center;gap:8px;padding:9px 14px;border-radius:9px;border:1px solid var(--border);
+    background:var(--bg2);color:var(--fg);font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;text-decoration:none}
+  .mbtn:hover{border-color:var(--border-hi)}
+  .mbtn.primary{background:linear-gradient(135deg,var(--s1),#2a6fc4);border-color:transparent;color:#eaf3ff}
+  .mbtn:disabled{opacity:.55;cursor:default}
+  .mrow{display:flex;gap:9px;flex-wrap:wrap;align-items:center;margin:14px 0}
+  .mnote{font-size:11.5px;color:var(--faint);line-height:1.6}
+  .minput{flex:1;min-width:210px;background:var(--bg2);border:1px solid var(--border);border-radius:9px;padding:9px 11px;
+    color:var(--fg);font:inherit;font-size:12.5px;font-family:var(--mono)}
+  .mstatus{margin-top:14px;padding:11px 13px;border-radius:9px;background:var(--bg2);border:1px solid var(--border);
+    font-size:12.5px;font-family:var(--mono);line-height:1.6}
+
   .caret{color:var(--faint);font-size:10px;display:inline-block;width:10px}
   .ok{color:var(--good-ink);font-weight:700}
   tr.netrow{cursor:pointer}
@@ -465,6 +503,7 @@ function KT_boot(D){
           <button data-m="30">30 дн</button><button data-m="7">7 дн</button>
         </div>
         <select class="day" id="daySel"></select>
+        <button class="refresh" id="refreshBtn" type="button"><span class="rico">↻</span><span id="refreshAge">оновити</span></button>
         <div class="meta"><div>історія: <b>${D.range.from}</b> → <b>${D.range.to}</b></div>
           <div>оновлено: <b>${D.generated}</b></div></div>
       </div>
@@ -608,6 +647,14 @@ function KT_boot(D){
             <div class="tbl-wrap" style="max-height:none"><table id="netTbl"></table></div>
             <div class="hint" id="netFoot"></div>
           </div>
+        </div>
+      </div>
+
+      <div class="modal" id="refreshModal" hidden>
+        <div class="mbox" role="dialog" aria-modal="true" aria-labelledby="mTitle">
+          <div class="mhead"><h3 id="mTitle">Оновити дані</h3>
+            <button class="mx" id="mClose" type="button" aria-label="Закрити">✕</button></div>
+          <div class="mbody" id="mBody"></div>
         </div>
       </div>
 
@@ -1564,6 +1611,148 @@ function KT_boot(D){
       const k=tr.dataset.k; if(netOpen.has(k)) netOpen.delete(k); else netOpen.add(k); renderNets();
     });
   }
+  // ── ручне оновлення даних ──────────────────────────────────────────────────
+  // Сторінка статична, бекенду немає. Тому два шляхи: посилання на GitHub
+  // Actions (працює завжди) і запуск одним кліком, якщо користувач один раз
+  // збереже свій токен — токен лежить ЛИШЕ в localStorage цього браузера.
+  const TOKEN_KEY="ktpulse_gh_token";
+  const tokGet=()=>{ try{ return localStorage.getItem(TOKEN_KEY)||""; }catch(e){ return ""; } };
+  const tokSet=(v)=>{ try{ v?localStorage.setItem(TOKEN_KEY,v):localStorage.removeItem(TOKEN_KEY); }catch(e){} };
+
+  function repoInfo(){
+    const h=location.hostname.match(/^([^.]+)\.github\.io$/i);
+    if(!h) return null;
+    const seg=location.pathname.split("/").filter(Boolean);
+    return {owner:h[1], repo: seg[0] || (h[1]+".github.io")};
+  }
+  const actionsUrl=()=>{ const r=repoInfo();
+    return r?`https://github.com/${r.owner}/${r.repo}/actions/workflows/build.yml`:"https://github.com"; };
+
+  const AGE_WARN=14*3600e3, AGE_OLD=30*3600e3;
+  function fmtAge(ms){
+    const m=Math.round(ms/60000);
+    if(m<2) return "щойно";
+    if(m<60) return m+" хв тому";
+    const h=Math.round(m/60);
+    if(h<36) return h+" "+plural(h,["година","години","годин"])+" тому";
+    const d=Math.round(h/24);
+    return d+" "+plural(d,["день","дні","днів"])+" тому";
+  }
+  function refreshAge(){
+    const btn=document.getElementById("refreshBtn"), lbl=document.getElementById("refreshAge");
+    if(!btn||!D.builtAt) return;
+    const age=Date.now()-Date.parse(D.builtAt);
+    if(!isFinite(age)) return;
+    lbl.textContent=fmtAge(age);
+    btn.classList.toggle("stale", age>=AGE_WARN && age<AGE_OLD);
+    btn.classList.toggle("old", age>=AGE_OLD);
+    btn.title = age>=AGE_WARN
+      ? `Дані зібрані ${fmtAge(age)} — збірка могла не спрацювати. Клікни, щоб запустити вручну.`
+      : `Дані зібрані ${fmtAge(age)}. Клікни, щоб оновити вручну.`;
+  }
+
+  const modal=document.getElementById("refreshModal");
+  const mBody=document.getElementById("mBody");
+  let polling=false;
+  const openModal=()=>{ modal.hidden=false; drawModal(); setTimeout(()=>{const i=mBody.querySelector("input,button,a");if(i)i.focus();},30); };
+  const closeModal=()=>{ if(!polling) modal.hidden=true; };
+  document.getElementById("mClose").onclick=closeModal;
+  modal.addEventListener("click",e=>{ if(e.target===modal) closeModal(); });
+  addEventListener("keydown",e=>{ if(e.key==="Escape"&&!modal.hidden) closeModal(); });
+
+  function setStatus(html,cls){
+    let el=document.getElementById("mStatus");
+    if(!el){ el=document.createElement("div"); el.id="mStatus"; el.className="mstatus"; mBody.appendChild(el); }
+    el.innerHTML=html; el.style.color=cls||"";
+  }
+
+  function drawModal(){
+    const has=!!tokGet();
+    const age=D.builtAt?fmtAge(Date.now()-Date.parse(D.builtAt)):"невідомо коли";
+    mBody.innerHTML=
+      `<p>Дані зібрані <b>${esc(D.generated||"")}</b> (${esc(age)}). Збірка запускається щоранку о 06:17, 08:17 і 10:17 за Києвом.</p>`+
+      `<p>Якщо прогін підвис або потрібні свіжі цифри просто зараз — запусти вручну.</p>`+
+      `<div class="mrow"><a class="mbtn" href="${actionsUrl()}" target="_blank" rel="noopener noreferrer">Відкрити GitHub Actions ↗</a>`+
+      `<span class="mnote">далі «Run workflow» → «Run workflow»</span></div>`+
+      (has
+        ? `<div class="mrow"><button class="mbtn primary" id="mRun" type="button">↻ Запустити звідси</button>`+
+          `<button class="mbtn" id="mForget" type="button">Прибрати токен</button></div>`+
+          `<p class="mnote">Токен збережений у цьому браузері. Запуск робиться від твого імені через GitHub API.</p>`
+        : `<p style="margin-top:16px"><b>Або одним кліком просто звідси.</b> Для цього потрібен персональний токен GitHub. `+
+          `Він зберігається <b>лише в цьому браузері</b> (localStorage) і йде тільки на api.github.com.</p>`+
+          `<div class="mrow"><input class="minput" id="mTok" type="password" placeholder="github_pat_…" autocomplete="off" spellcheck="false">`+
+          `<button class="mbtn primary" id="mSave" type="button">Зберегти</button></div>`+
+          `<p class="mnote"><a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener noreferrer">Створити токен ↗</a> — `+
+          `<b>Repository access:</b> тільки цей репозиторій · <b>Permissions → Actions:</b> Read and write. Більше нічого не вмикай. `+
+          `Хто має доступ до цього браузера — має доступ і до токена, тож не став його на спільному компʼютері.</p>`);
+    const run=document.getElementById("mRun"); if(run) run.onclick=startBuild;
+    const forget=document.getElementById("mForget"); if(forget) forget.onclick=()=>{ tokSet(""); drawModal(); };
+    const save=document.getElementById("mSave");
+    if(save) save.onclick=()=>{ const v=document.getElementById("mTok").value.trim(); if(!v) return; tokSet(v); drawModal(); setStatus("Токен збережено. Тисни «Запустити звідси»."); };
+  }
+
+  async function gh(path,init){
+    const r=repoInfo(); if(!r) throw new Error("не вдалось визначити репозиторій зі сторінки");
+    return fetch(`https://api.github.com/repos/${r.owner}/${r.repo}${path}`,{
+      ...(init||{}),
+      headers:{ "Accept":"application/vnd.github+json", "X-GitHub-Api-Version":"2022-11-28",
+        "Authorization":"Bearer "+tokGet(), ...((init&&init.headers)||{}) },
+    });
+  }
+
+  async function startBuild(){
+    const btn=document.getElementById("refreshBtn");
+    polling=true; btn.classList.add("busy");
+    const run=document.getElementById("mRun"); if(run) run.disabled=true;
+    try{
+      setStatus("Запускаю збірку…");
+      const res=await gh("/actions/workflows/build.yml/dispatches",{method:"POST",body:JSON.stringify({ref:"main"})});
+      if(res.status===401||res.status===403){
+        setStatus(`Токен не підійшов (${res.status}). Перевір права: Actions — Read and write, і що доступ виданий саме цьому репозиторію.`,"var(--crit-ink)");
+        return;
+      }
+      if(res.status!==204){
+        setStatus(`GitHub відповів ${res.status}. Запусти через <a href="${actionsUrl()}" target="_blank" rel="noopener noreferrer">Actions ↗</a>.`,"var(--crit-ink)");
+        return;
+      }
+      setStatus("Збірка поставлена в чергу…");
+      const t0=Date.now();
+      let runUrl=actionsUrl();
+      for(let i=0;i<75;i++){            // до ~10 хвилин
+        await new Promise(r=>setTimeout(r, i<3?4000:8000));
+        let j=null;
+        try{
+          const q=await gh("/actions/runs?event=workflow_dispatch&per_page=1");
+          if(q.ok) j=(await q.json()).workflow_runs?.[0];
+        }catch(e){}
+        const el=Math.round((Date.now()-t0)/1000);
+        const mm=String(Math.floor(el/60)).padStart(1,"0"), ss=String(el%60).padStart(2,"0");
+        if(!j){ setStatus(`Чекаю на старт… ${mm}:${ss}`); continue; }
+        runUrl=j.html_url||runUrl;
+        if(j.status!=="completed"){ setStatus(`Збірка виконується… ${mm}:${ss} · <a href="${runUrl}" target="_blank" rel="noopener noreferrer">лог ↗</a>`); continue; }
+        if(j.conclusion==="success"){
+          setStatus("Готово. Перезавантажую сторінку…","var(--good-ink)");
+          setTimeout(()=>location.reload(), 2500);
+        }else{
+          setStatus(`Збірка завершилась як «${esc(j.conclusion||"?")}». <a href="${runUrl}" target="_blank" rel="noopener noreferrer">Відкрити лог ↗</a>`,"var(--crit-ink)");
+        }
+        return;
+      }
+      setStatus(`Збірка триває довше за звичайне. <a href="${runUrl}" target="_blank" rel="noopener noreferrer">Подивитись лог ↗</a>`,"var(--warn)");
+    }catch(e){
+      setStatus(`Не вдалось: ${esc(String(e.message||e))}. Запусти через <a href="${actionsUrl()}" target="_blank" rel="noopener noreferrer">Actions ↗</a>.`,"var(--crit-ink)");
+    }finally{
+      polling=false; btn.classList.remove("busy");
+      const r2=document.getElementById("mRun"); if(r2) r2.disabled=false;
+    }
+  }
+
+  document.getElementById("refreshBtn").onclick=()=>{
+    if(tokGet()){ openModal(); startBuild(); } else openModal();
+  };
+  refreshAge();
+  setInterval(refreshAge, 60000);
+
   function render(){
     setRange(); renderChip();
     const f=state.filter;
