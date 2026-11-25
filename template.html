@@ -212,16 +212,6 @@
   .digest .q{cursor:pointer;border-bottom:1px dashed var(--border-hi);color:var(--fg);font-weight:600}
   .digest .q:hover{color:var(--blue);border-bottom-color:var(--blue)}
 
-  .mv{display:grid;grid-template-columns:repeat(3,1fr);gap:22px}
-  @media(max-width:1050px){.mv{grid-template-columns:1fr}}
-  .mvh{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding-bottom:8px;
-    margin-bottom:4px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:baseline;gap:8px}
-  .mvh span.n{color:var(--faint);font-weight:600;letter-spacing:0;text-transform:none}
-  .mvrow{display:grid;grid-template-columns:1fr auto;gap:3px 10px;align-items:center;padding:7px 7px;border-radius:8px;cursor:pointer}
-  .mvrow:hover{background:rgba(79,157,255,.09)}
-  .mvn{font-size:12.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .mvd{font-family:var(--mono);font-size:12.5px;font-weight:700;text-align:right;white-space:nowrap}
-  .mvs{font-size:10.5px;color:var(--faint);grid-column:1/3;display:flex;gap:7px;align-items:center;flex-wrap:wrap;font-family:var(--mono)}
   .badge{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;padding:1px 6px;border-radius:5px;
     background:var(--bg2);color:var(--dim);border:1px solid var(--border);font-family:inherit}
   .badge.new{color:var(--good-ink);border-color:rgba(83,197,86,.34);background:rgba(83,197,86,.1)}
@@ -344,7 +334,7 @@
   /* Клікабельні рядки — це div-и; без цього вони недосяжні з клавіатури,
      а стандартна обводка на темному фоні майже не видно. */
   :focus-visible{outline:2px solid var(--s1);outline-offset:2px;border-radius:7px}
-  .trow:focus-visible,.mvrow:focus-visible,.netrow:focus-visible{background:rgba(79,157,255,.1)}
+  .trow:focus-visible,.dvrow:focus-visible,.ncrow:focus-visible,.netrow:focus-visible{background:rgba(79,157,255,.1)}
 
   .caret{color:var(--faint);font-size:10px;display:inline-block;width:10px}
   .ok{color:var(--good-ink);font-weight:700}
