@@ -35,6 +35,7 @@
       radial-gradient(at 88% 108%, rgba(40,190,200,.14) 0, transparent 45%);
     background-attachment:fixed; min-height:100vh;
   }
+  @media(prefers-reduced-motion:reduce){ *{animation:none!important;transition:none!important;scroll-behavior:auto!important} }
   ::-webkit-scrollbar{width:10px;height:10px}
   ::-webkit-scrollbar-thumb{background:var(--border);border-radius:6px}
   ::-webkit-scrollbar-thumb:hover{background:var(--faint)}
@@ -49,6 +50,27 @@
   }
   .hrow{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
   .hrow+.hrow{margin-top:11px}
+  header .seg,header .day{flex-shrink:0}
+  header{transition:padding .15s}
+  header.tight{padding:7px 22px}
+  header.tight .brand .sub,header.tight .meta{display:none}
+  @media(max-width:1000px){
+    header{padding:10px 14px}
+    /* На вузькому шапка розросталась до третини екрана і ще й липла зверху.
+       Тепер кожен ряд — смуга з горизонтальною прокруткою. */
+    .hrow{flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;gap:10px;scrollbar-width:none;-ms-overflow-style:none}
+    .hrow::-webkit-scrollbar{display:none}
+    /* смуга прокручується — але вкладки лишаються прибитими до лівого краю,
+       інакше після тапу по «30 дн» не видно, на якій ти вкладці */
+    #tabSeg{position:sticky;left:0;z-index:2;background:var(--bg);box-shadow:8px 0 12px -8px rgba(0,0,0,.8)}
+    .brand{margin-right:4px}
+    main .phead{flex-direction:column;align-items:flex-start;gap:10px}
+    main .phead .tools,main .phead .seg{width:100%}
+    .brand .sub{display:none}
+    .meta{display:none}
+    .fq{min-width:170px}
+    body main{padding:14px}
+  }
   .brand{display:flex;align-items:center;gap:11px;margin-right:auto}
   .logo{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,var(--blue),var(--cyan));
     display:flex;align-items:center;justify-content:center;font-weight:800;color:#0b1018;font-size:18px;
@@ -96,6 +118,8 @@
   .up{color:var(--good-ink)} .down{color:var(--crit-ink)} .flat{color:var(--faint)}
 
   .grid{display:grid;gap:16px;margin-bottom:16px}
+  /* min-width:0 — інакше таблиця з nowrap розпирає свою колонку і всю сторінку */
+  .grid>*,.lead>*,.tiles>*,.panel,.tbl-wrap{min-width:0}
   .g2{grid-template-columns:1fr 1fr}
   .g3{grid-template-columns:2fr 1fr}
   @media(max-width:1050px){.g2,.g3{grid-template-columns:1fr}}
@@ -109,7 +133,12 @@
   input.search{background:var(--bg2);border:1px solid var(--border);color:var(--fg);font:inherit;font-size:12px;
     padding:6px 10px;border-radius:8px;width:140px}
   input.search:focus{outline:none;border-color:var(--border-hi)}
-  .tbl-wrap{overflow:auto;margin:0 -4px;max-height:460px}
+  /* Вертикального скролу всередині картки немає: у коробці на 460px ніхто не
+     гортає 150 рядків. Замість цього показуємо 25 і кнопку «показати всі». */
+  .tbl-wrap{overflow:auto;margin:0 -4px}
+  .morebtn{display:block;width:100%;margin-top:10px;padding:8px;background:var(--bg2);border:1px solid var(--border);
+    border-radius:9px;color:var(--dim);font:inherit;font-size:12px;font-weight:600;cursor:pointer;transition:all .12s}
+  .morebtn:hover{color:var(--fg);border-color:var(--border-hi)}
   table{width:100%;border-collapse:collapse;font-size:12.5px}
   th,td{padding:8px 9px;text-align:right;white-space:nowrap}
   th:first-child,td:first-child{text-align:left}
@@ -211,7 +240,8 @@
   .hval{font-size:46px;font-weight:700;line-height:1.05;margin-top:9px;letter-spacing:-1.2px}
   .hdl{font-size:12.5px;font-weight:700;margin-top:9px;display:flex;align-items:baseline;gap:7px;flex-wrap:wrap}
   .hdl .sub,.dl .sub{color:var(--faint);font-weight:500}
-  .hspark{margin:10px -19px -9px;opacity:.85}
+  .hcap{font-size:10px;color:var(--faint);text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-top:12px}
+  .hspark{margin:6px -19px -9px;opacity:.85}
   .hspark .spark{height:56px}
   .tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
   .tiles .kpi{display:flex;flex-direction:column;justify-content:center}
@@ -238,7 +268,7 @@
   .tsp{height:28px}
   .tsp .spark{height:28px}
   @media(max-width:1050px){
-    .thead,.trow{grid-template-columns:1.4fr 1fr 1fr}
+    .thead,.trow{grid-template-columns:1.5fr .9fr .9fr .8fr;gap:8px}
     .tbar,.tsp,.tcr,.trev,.thead span:nth-child(2),.thead span:nth-child(6),
     .thead span:nth-child(7),.thead span:nth-child(8){display:none}
   }
@@ -253,6 +283,11 @@
   .drawer>summary:hover{color:var(--fg)}
   .drawer .inner{padding:0 14px 6px}
   .drawer .grid{margin-bottom:14px}
+
+  /* Клікабельні рядки — це div-и; без цього вони недосяжні з клавіатури,
+     а стандартна обводка на темному фоні майже не видно. */
+  :focus-visible{outline:2px solid var(--s1);outline-offset:2px;border-radius:7px}
+  .trow:focus-visible,.mvrow:focus-visible,.netrow:focus-visible{background:rgba(79,157,255,.1)}
 
   .caret{color:var(--faint);font-size:10px;display:inline-block;width:10px}
   .ok{color:var(--good-ink);font-weight:700}
@@ -300,7 +335,7 @@ function KT_boot(D){
 
   // ── state ──────────────────────────────────────────────────────────────────
   const state = {
-    tab:"ov", mode:"all", fromIdx:0, toIdx:N-1, dayIdx:N-1, selectedPage:null, team:-1,  // team: -1 = усі
+    tab:"ov", mode:"30", fromIdx:0, toIdx:N-1, dayIdx:N-1, selectedPage:null, team:-1,  // team: -1 = усі
     filter:{ type:"site", match:"partial", q:"", active:false, campSet:null, offerSet:null }
   };
   const teamOK = (t)=> state.team<0 || t===state.team;
@@ -447,6 +482,7 @@ function KT_boot(D){
             <div class="tools"><span id="siteTag"></span><input class="search" id="siteSearch" placeholder="в таблиці…"></div>
           </div>
           <div class="tbl-wrap"><table id="siteTbl"></table></div>
+          <div id="siteMore"></div>
           <div class="hint">клік по рядку → фільтр на цей сайт</div>
         </div>
         <div class="panel">
@@ -455,6 +491,7 @@ function KT_boot(D){
             <div class="tools"><span id="brandTag"></span><input class="search" id="brandSearch" placeholder="в таблиці…"></div>
           </div>
           <div class="tbl-wrap"><table id="brandTbl"></table></div>
+          <div id="brandMore"></div>
           <div class="hint">клік по рядку → фільтр на цей бренд</div>
         </div>
       </div>
@@ -486,7 +523,7 @@ function KT_boot(D){
       <div class="grid g2">
         <div class="panel">
           <div class="phead"><div><h2>💰 Сайти з конверсіями</h2><div class="psub">Хто реально конвертить у вибраному періоді/фільтрі</div></div></div>
-          <div class="tbl-wrap"><table id="convTbl"></table></div>
+          <div class="tbl-wrap" style="max-height:430px"><table id="convTbl"></table></div>
         </div>
         <div class="panel">
           <div class="phead"><div><h2>Мережі (префікс) та ОС</h2><div class="psub">Групування за префіксом кампанії й ОС</div></div></div>
@@ -541,6 +578,34 @@ function KT_boot(D){
     teamSeg.addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b)return; state.team=+b.dataset.tm; state.selectedPage=null; syncTeam(); computeFilter(); render(); });
   }
 
+  // Шапка займала 153px постійно. При скролі ховаємо підзаголовок і дати —
+  // лишаються самі контроли.
+  // Пропорція графіка залежить від ширини картки — при зміні розміру вікна
+  // перемальовуємо, але тільки коли справді перетнули межу.
+  (function chartOnResize(){
+    let last=null, tm=null;
+    addEventListener("resize",()=>{ clearTimeout(tm); tm=setTimeout(()=>{
+      const w=document.getElementById("chartWrap"); if(!w||state.tab!=="ov") return;
+      const n=(w.clientWidth||900)<620; if(n!==last){ last=n; renderChart(); }
+    },180); },{passive:true});
+  })();
+
+  (function shrinkHeader(){
+    const h=document.querySelector("header"); let on=false;
+    addEventListener("scroll",()=>{ const want=scrollY>40;
+      if(want!==on){ on=want; h.classList.toggle("tight",on); } },{passive:true});
+  })();
+
+  // Клікабельні рядки — div-и: з клавіатури вони недосяжні без цього.
+  addEventListener("keydown",e=>{
+    const el=e.target;
+    if((e.key==="Enter"||e.key===" ")&&el instanceof HTMLElement&&el.matches('[data-key="1"]')){
+      e.preventDefault(); el.click(); }
+  });
+
+  const smooth=!matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const toTop=()=>scrollTo({top:0,behavior:smooth?"smooth":"auto"});
+
   const tabSeg=document.getElementById("tabSeg");
   function syncTab(){
     [...tabSeg.children].forEach(b=>b.classList.toggle("on",b.dataset.tab===state.tab));
@@ -549,7 +614,7 @@ function KT_boot(D){
     document.getElementById("filterRow").style.display = state.tab==="ov"?"":"none";
   }
   tabSeg.addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b||b.dataset.tab===state.tab)return;
-    state.tab=b.dataset.tab; syncTab(); render(); });
+    state.tab=b.dataset.tab; syncTab(); render(); toTop(); });
 
   const netFiltSeg=document.getElementById("netFilt"), netSearchEl=document.getElementById("netSearch");
   function syncNetFilt(){ [...netFiltSeg.children].forEach(b=>b.classList.toggle("on",b.dataset.f===netFilt)); }
@@ -557,7 +622,13 @@ function KT_boot(D){
   let netTimer=null;
   netSearchEl.addEventListener("input",e=>{ netQ=e.target.value.trim(); clearTimeout(netTimer); netTimer=setTimeout(renderNets,180); });
 
-  function selectTeam(t){ state.team=t; state.selectedPage=null; syncTeam(); computeFilter(); render(); }
+  function selectTeam(t){
+    // Рядок, з якого прийшов клік, після перемальовки зникає разом із фокусом —
+    // повертаємо його на те саме місце, інакше з клавіатури вибір не зняти.
+    const was=document.activeElement, key=was&&was.dataset?was.dataset.tm:null;
+    state.team=t; state.selectedPage=null; syncTeam(); computeFilter(); render();
+    if(key!=null){ const el=document.querySelector(`.trow[data-tm="${key}"]`); if(el) el.focus(); }
+  }
 
   const mvSeg=document.getElementById("mvSeg");
   function syncMv(){ [...mvSeg.children].forEach(b=>b.classList.toggle("on",+b.dataset.k===mvMetric)); }
@@ -573,7 +644,7 @@ function KT_boot(D){
   let fqTimer=null;
   fq.addEventListener("input",e=>{ state.filter.q=e.target.value; clearTimeout(fqTimer); fqTimer=setTimeout(applyFilter,180); });
   function applyFilter(){ state.selectedPage=null; computeFilter(); render(); }
-  function setFilter(type,q,match){ state.filter.type=type; state.filter.match=match||"exact"; state.filter.q=q; fq.value=q; syncFilterUI(); applyFilter(); window.scrollTo({top:0,behavior:"smooth"}); }
+  function setFilter(type,q,match){ state.filter.type=type; state.filter.match=match||"exact"; state.filter.q=q; fq.value=q; syncFilterUI(); applyFilter(); toTop(); }
   function clearFilter(){ state.filter.q=""; fq.value=""; applyFilter(); }
 
   function renderChip(){
@@ -616,7 +687,7 @@ function KT_boot(D){
     document.getElementById("hero").innerHTML=
       `<div><div class="hlbl">Підтверджений дохід <span class="hrange">${esc(rangeLabel())}</span></div>
         <div class="hval">${fmtMoney(cur[5])}</div>${delta(5,1)}</div>
-       <div class="hspark">${sparkSVG(vals,"var(--s1)")}</div>`;
+       <div><div class="hcap">дохід по днях</div><div class="hspark">${sparkSVG(vals,"var(--s1)")}</div></div>`;
 
     const cr=div(cur[1],cur[0])*100, crPrev=prev?div(prev[1],prev[0])*100:null;
     const crD=crPrev!==null?cr-crPrev:0;
@@ -645,7 +716,11 @@ function KT_boot(D){
     const per=seriesData();
     const s=[]; for(let i=state.fromIdx;i<=state.toIdx;i++) s.push({idx:i,day:D.days[i],clicks:per[i][0],conv:per[i][1],rev:per[i][5]});
     const n=s.length;
-    const W=900,PL=54,PR=14,PT=22,H1=128,GAP=30,H2=70,XB=22,H=PT+H1+GAP+H2+XB;
+    // SVG масштабується рівномірно, тож на вузькій картці широка пропорція
+    // перетворювала графік на смужку 105px заввишки. Міняємо саму пропорцію.
+    const narrow=(wrap.clientWidth||900)<620;
+    const W=narrow?460:900, PL=narrow?44:54, PR=narrow?10:14, PT=22,
+          H1=narrow?132:128, GAP=narrow?30:30, H2=narrow?84:70, XB=22, H=PT+H1+GAP+H2+XB;
     const iw=W-PL-PR, top2=PT+H1+GAP;
     const x=i=> n<=1 ? PL+iw/2 : PL+(i/(n-1))*iw;
     // верхівка осі — кругле число: «16 054» на підписі читається як дані, хоч це просто межа
@@ -665,7 +740,7 @@ function KT_boot(D){
         grid+=`<line x1="${PL}" y1="${yy}" x2="${W-PR}" y2="${yy}" stroke="var(--grid)" stroke-width="1"/>`;
         ylab+=`<text x="${PL-9}" y="${yy+3}" text-anchor="end" fill="var(--faint)" font-size="9" font-family="var(--mono)">${fmt(mx*(1-g/2))}</text>`; }
     }
-    let xlab="", step=Math.max(1,Math.ceil(n/10));
+    let xlab="", step=Math.max(1,Math.ceil(n/(narrow?5:10)));
     const dm=d=>d.slice(8,10)+"."+d.slice(5,7);
     for(let i=0;i<n;i+=step) xlab+=`<text x="${x(i).toFixed(1)}" y="${H-6}" text-anchor="middle" fill="var(--faint)" font-size="9" font-family="var(--mono)">${dm(s[i].day)}</text>`;
     // одна точка не малюється лінією — показуємо маркер
@@ -697,7 +772,8 @@ function KT_boot(D){
       d1.setAttribute("cx",cx); d1.setAttribute("cy",y1(d.clicks)); d1.style.opacity=1;
       d2.setAttribute("cx",cx); d2.setAttribute("cy",y2(d.conv));  d2.style.opacity=1;
       tip.style.opacity=1;
-      tip.style.left=Math.min(r.width-170,Math.max(0,(cx/W)*r.width+12))+"px"; tip.style.top="4px";
+      tip.style.left=Math.min(r.width-176,Math.max(0,(cx/W)*r.width+12))+"px";
+      tip.style.top=Math.max(2,Math.min(r.height-96,ev.clientY-r.top-54))+"px";
       const cr=div(d.conv,d.clicks)*100;
       tip.innerHTML=`<b>${d.day}</b><br><span class="k">Кліки:</span> <b class="mono">${fmtInt(d.clicks)}</b>`+
         `<br><span class="k">Конверсії:</span> <b class="mono" style="color:var(--s2)">${fmtInt(d.conv)}</b>`+
@@ -711,6 +787,17 @@ function KT_boot(D){
   // ── sites table ──────────────────────────────────────────────────────────────
   const sortState={site:{key:2,asc:false},brand:{key:1,asc:false}};
   let siteFilter="",brandFilter="";
+  // Скільки рядків показуємо одразу. 150 у коробці з власним скролом ніхто не
+  // гортав; тепер 25 і кнопка, а картка росте разом зі вмістом.
+  const TBL_STEP=25;
+  let tblCap={site:TBL_STEP,brand:TBL_STEP};
+  function moreBtn(id,total,key,rerender){
+    const el=document.getElementById(id); if(!el) return;
+    el.innerHTML = total>tblCap[key]
+      ? `<button class="morebtn" type="button">показати всі ${fmtInt(total)} ↓</button>` : "";
+    const b=el.querySelector("button");
+    if(b) b.onclick=()=>{ tblCap[key]=total; rerender(); };
+  }
   document.getElementById("siteSearch").addEventListener("input",e=>{siteFilter=e.target.value.toLowerCase();renderSites();});
   document.getElementById("brandSearch").addEventListener("input",e=>{brandFilter=e.target.value.toLowerCase();renderBrands();});
 
@@ -728,8 +815,8 @@ function KT_boot(D){
     const cols=["name","geo","clicks","conv","cr","sales","rev","confRev"], head=["Сайт","Гео","Кліки","Конв","CR","Прод","Дохід","Підтв."];
     const sk=cols[sortState.site.key];
     rows.sort((a,b)=> sortState.site.asc?cmp(a[sk],b[sk]):cmp(b[sk],a[sk]));
-    const total=rows.length, shown=rows.slice(0,150), maxC=Math.max(1,...shown.map(r=>r.clicks));
-    document.getElementById("siteSub").textContent=`${total} сайтів · топ ${Math.min(150,total)}`;
+    const total=rows.length, shown=rows.slice(0,tblCap.site), maxC=Math.max(1,...shown.map(r=>r.clicks));
+    document.getElementById("siteSub").textContent=`${fmtInt(total)} ${plural(total,["сайт","сайти","сайтів"])}${total>shown.length?` · показано ${shown.length}`:""}`;
     document.getElementById("siteTag").innerHTML= whole?`<span class="tag-all">за весь період</span>`:"";
     document.getElementById("siteTbl").innerHTML=
       `<thead><tr>${head.map((h,i)=>`<th data-i="${i}" class="${sortState.site.key===i?'sorted '+(sortState.site.asc?'asc':''):''}">${h}</th>`).join("")}</tr></thead>`+
@@ -745,6 +832,7 @@ function KT_boot(D){
     const tbl=document.getElementById("siteTbl");
     tbl.querySelectorAll("th").forEach(th=>th.onclick=()=>{const i=+th.dataset.i; if(sortState.site.key===i)sortState.site.asc=!sortState.site.asc;else{sortState.site.key=i;sortState.site.asc=false;}renderSites();});
     tbl.querySelectorAll("tbody tr[data-name]").forEach(tr=>tr.onclick=()=>setFilter("site",tr.dataset.name));
+    moreBtn("siteMore",total,"site",renderSites);
   }
 
   // ── brands table ───────────────────────────────────────────────────────────────
@@ -762,8 +850,8 @@ function KT_boot(D){
     const cols=["name","clicks","conv","cr","sales","rev","confRev"], head=["Бренд","Кліки","Конв","CR","Прод","Дохід","Підтв."];
     const sk=cols[sortState.brand.key];
     rows.sort((a,b)=> sortState.brand.asc?cmp(a[sk],b[sk]):cmp(b[sk],a[sk]));
-    const total=rows.length, shown=rows.slice(0,150), maxC=Math.max(1,...shown.map(r=>r.clicks));
-    document.getElementById("brandSub").textContent=`${total} брендів · топ ${Math.min(150,total)}`;
+    const total=rows.length, shown=rows.slice(0,tblCap.brand), maxC=Math.max(1,...shown.map(r=>r.clicks));
+    document.getElementById("brandSub").textContent=`${fmtInt(total)} ${plural(total,["бренд","бренди","брендів"])}${total>shown.length?` · показано ${shown.length}`:""}`;
     document.getElementById("brandTag").innerHTML= whole?`<span class="tag-all">за весь період</span>`:"";
     document.getElementById("brandTbl").innerHTML=
       `<thead><tr>${head.map((h,i)=>`<th data-i="${i}" class="${sortState.brand.key===i?'sorted '+(sortState.brand.asc?'asc':''):''}">${h}</th>`).join("")}</tr></thead>`+
@@ -778,6 +866,7 @@ function KT_boot(D){
     const tbl=document.getElementById("brandTbl");
     tbl.querySelectorAll("th").forEach(th=>th.onclick=()=>{const i=+th.dataset.i; if(sortState.brand.key===i)sortState.brand.asc=!sortState.brand.asc;else{sortState.brand.key=i;sortState.brand.asc=false;}renderBrands();});
     tbl.querySelectorAll("tbody tr[data-name]").forEach(tr=>tr.onclick=()=>setFilter("brand",tr.dataset.name));
+    moreBtn("brandMore",total,"brand",renderBrands);
   }
 
   // ── positions & pages (rel, whole history) ────────────────────────────────────
@@ -1042,7 +1131,8 @@ function KT_boot(D){
       const cr=div(r.cur[1],r.cur[0])*100;
       const k=r.d>0?"up":(r.d<0?"down":"flat"), ic=r.d>0?"▲":(r.d<0?"▼":"—");
       const pct=r.p>0?r.d/r.p*100:(r.d>0?100:0);
-      return `<div class="trow ${state.team===r.t?"on":""}" data-tm="${r.t}" style="--hue:${teamHue(r.t)}">
+      return `<div class="trow ${state.team===r.t?"on":""}" data-tm="${r.t}" tabindex="0" role="button" data-key="1"
+        aria-label="${esc(D.teams[r.t]||"")}: ${fmtInt(r.cur[0])} кліків" style="--hue:${teamHue(r.t)}">
         <span class="tname"><i class="tdot"></i>${esc(D.teams[r.t]||"")}</span>
         <span class="tbar" title="${(r.cur[0]/Math.max(1,tot)*100).toFixed(1)}% усього трафіку · смуга — відносно найбільшої команди"><i style="width:${(r.cur[0]/max*100).toFixed(1)}%"></i></span>
         <span class="tnum">${fmtInt(r.cur[0])}</span>
@@ -1085,7 +1175,7 @@ function KT_boot(D){
       return b.join(" ");
     };
     const val=(v)=> money?fmtMoney(v):fmtInt(v);
-    const row=(r)=>`<div class="mvrow" data-oi="${r.oi}" data-ti="${r.ti==null?"":r.ti}">
+    const row=(r)=>`<div class="mvrow" tabindex="0" role="button" data-key="1" data-oi="${r.oi}" data-ti="${r.ti==null?"":r.ti}">
       <div class="mvn">${name(r)}</div>
       <div class="mvd">${dHTML(r.c[m]-r.p[m],r.p[m],money)}</div>
       <div class="mvs">${val(r.p[m])} → ${val(r.c[m])} ${badges(r)}</div></div>`;
@@ -1098,7 +1188,7 @@ function KT_boot(D){
       col("▲ Зростають","up",up,"Нікого, хто б помітно виріс.") +
       col("▼ Просідають","down",dn,"Ніхто помітно не просів.") +
       `<div><div class="mvh"><span style="color:var(--warn)">⚠ Клікають, але не конвертять</span><span class="n">${nc.length}</span></div>
-        ${nc.length?nc.map(r=>`<div class="mvrow" data-oi="${r.oi}" data-ti="${r.ti==null?"":r.ti}">
+        ${nc.length?nc.map(r=>`<div class="mvrow" tabindex="0" role="button" data-key="1" data-oi="${r.oi}" data-ti="${r.ti==null?"":r.ti}">
           <div class="mvn">${name(r)}</div><div class="mvd" style="color:var(--warn)">${fmtInt(r.c[0])}</div>
           <div class="mvs">кліків за період · 0 конверсій ${r.p[1]>0?`<span class="badge dead">раніше ${fmtInt(r.p[1])}</span>`:""}</div></div>`).join("")
           :`<div class="mvempty">Усі помітні бренди дають конверсії. 👌</div>`}</div>`;
@@ -1114,7 +1204,7 @@ function KT_boot(D){
     const el=document.getElementById("digest"), sub=document.getElementById("dgSub");
     if(!MV){ el.innerHTML=`<li><span class="ic">·</span><span>Замало історії, щоб порівняти два періоди.</span></li>`; sub.textContent=""; return; }
     const w=MV.w; sub.textContent=w.label;
-    const q=(s)=>`<span class="q" data-b="${esc(s)}">${esc(s)}</span>`;
+    const q=(s)=>`<span class="q" tabindex="0" role="button" data-key="1" data-b="${esc(s)}">${esc(s)}</span>`;
     const pc=(d,p)=> p>0 ? `${d>=0?"+":"−"}${Math.abs(d/p*100).toFixed(0)}%` : (d>0?"з нуля":"—");
     const li=(ic,html)=>`<li><span class="ic">${ic}</span><span>${html}</span></li>`;
     const out=[];
@@ -1293,7 +1383,7 @@ function KT_boot(D){
         : (r.par ? `<span class="ok">✓</span>`
           : (r.ownMacro ? `<span style="color:var(--gold)">${partial?`${r.ownMacro}/${r.offers.length}`:"✓ в оферах"}</span>`
             : `<span style="color:var(--red)">⛔</span>`));
-      const main=`<tr class="netrow" data-k="${r.ti}|${r.ni}">
+      const main=`<tr class="netrow" tabindex="0" role="button" data-key="1" data-k="${r.ti}|${r.ni}">
         <td><span class="caret">${open?"▾":"▸"}</span> <span class="site">${esc(r.name)}</span>`+
         `${(state.team<0&&nTeams>1)?" "+teamChip(r.ti):""}</td>
         <td>${r.pb?`<span class="ok">✓</span>`:`<span class="badge dead">немає</span>`}</td>
@@ -1335,6 +1425,7 @@ function KT_boot(D){
     const scopeTxt = f.active ? ` · ${f.type==="brand"?"бренд":"сайт"} “${esc(f.q)}”` : "";
     const rangeTxt = state.mode==="day"?`день ${D.days[state.dayIdx]}`:state.mode==="all"?"весь період":`останні ${state.mode} дн`;
     document.getElementById("chartTitle").textContent=`Трафік · ${rangeTxt}${scopeTxt}`;
+    tblCap={site:TBL_STEP,brand:TBL_STEP};
     if(state.tab==="net"){ renderNets(); return; }
     MV=moversData();
     renderKpis(); renderDigest(); renderTeamCards(); renderMovers();
