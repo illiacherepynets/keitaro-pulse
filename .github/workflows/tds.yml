@@ -1,0 +1,92 @@
+name: Перевірка ТДС-лінків
+
+# Запускається ТІЛЬКИ вручну. Резидентський трафік DataImpulse платний, а сотні
+# лінків щоночі — це гігабайти намарно: ТДС ламається не щодня, а після правок
+# у афки або бану домена. Тому перевірка «за потреби», як і просив замовник.
+on:
+  workflow_dispatch:
+    inputs:
+      scope:
+        description: 'Що перевіряти: all · гео (IT) · кілька гео (IT,DK) · точна назва вкладки'
+        default: 'all'
+      limit:
+        description: 'Максимум лінків за прогін (страховка від зайвого трафіку)'
+        default: '400'
+      ua:
+        description: 'З якого девайса дивитись'
+        type: choice
+        options: [mobile, desktop]
+        default: mobile
+
+permissions:
+  contents: write     # треба, щоб покласти data/tds.enc назад у репозиторій
+  pages: write
+  id-token: write
+
+jobs:
+  check:
+    name: Перевірка через резидентські проксі
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    # Власна група: збірка дашборда не повинна гасити довгий прогін перевірки.
+    concurrency:
+      group: tds-check
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Перевірити лінки
+        env:
+          KT_PROXY: ${{ secrets.KT_PROXY }}
+          KT_GSHEET: ${{ secrets.KT_GSHEET }}
+          KT_PASSWORD: ${{ secrets.KT_PASSWORD }}
+          TDS_SCOPE: ${{ inputs.scope }}
+          TDS_LIMIT: ${{ inputs.limit }}
+          TDS_UA: ${{ inputs.ua }}
+        run: node tds.mjs
+      - name: Зберегти результат
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/tds.enc
+          git diff --staged --quiet || git commit -m "ТДС: результати перевірки ${{ inputs.scope }}"
+          git push
+
+  publish:
+    name: Перезібрати дашборд
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main          # саме той коміт, що щойно приніс свіжий tds.enc
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Build dashboard
+        env:
+          KT_TEAMS: ${{ secrets.KT_TEAMS }}
+          KT_PASSWORD: ${{ secrets.KT_PASSWORD }}
+          KT_JIRA: ${{ secrets.KT_JIRA }}
+          KT_OUT: public/index.html
+        run: node fetch.mjs
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+
+  deploy:
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

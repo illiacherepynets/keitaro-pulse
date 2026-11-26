@@ -302,6 +302,30 @@
   .caret{color:var(--faint);font-size:10px;display:inline-block;width:10px}
   .ok{color:var(--good-ink);font-weight:600}
   tr.netrow{cursor:pointer}
+  /* ── ТДС: вердикт і ланцюг редіректів ───────────────────────────────────── */
+  tr.tdsrow{cursor:pointer}
+  .vd{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:var(--radius-xs);white-space:nowrap}
+  .vd.ok{background:var(--good-bg);color:var(--good-ink)}
+  .vd.bad{background:var(--crit-bg);color:var(--crit-ink)}
+  .vd.warn{background:var(--warn-bg);color:var(--warn-ink)}
+  .vd.mute{background:var(--bg2);color:var(--dim)}
+  .chain{list-style:none;margin:0;padding:2px 0 8px}
+  .chain li{display:grid;grid-template-columns:30px 54px 1fr;gap:10px;align-items:baseline;
+    padding:6px 2px;font-size:12px}
+  .chain li+li{border-top:1px solid var(--border)}
+  .chain .hop{color:var(--faint);font-size:11px;font-variant-numeric:tabular-nums}
+  .chain .st{font-weight:700;font-size:11px;font-variant-numeric:tabular-nums}
+  .chain .st.s2{color:var(--good-ink)} .chain .st.s3{color:var(--info-ink)}
+  .chain .st.s4,.chain .st.s5,.chain .st.s0{color:var(--crit-ink)}
+  .chain .u{word-break:break-all;color:var(--dim);font-family:var(--mono);font-size:11.5px}
+  .chain .ti{color:var(--faint);font-size:11px;margin-top:2px}
+  .chain .via{display:inline-block;font-size:10px;font-weight:700;color:var(--faint);
+    background:var(--bg2);border-radius:var(--radius-xs);padding:1px 5px;margin-left:6px;vertical-align:1px}
+  .tdsbar{display:flex;height:8px;border-radius:4px;overflow:hidden;background:var(--bg2);margin:2px 0 10px}
+  .tdsbar i{display:block;height:100%}
+  .tdsleg{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:11.5px;color:var(--dim);margin-bottom:12px}
+  .tdsleg span{display:inline-flex;align-items:center;gap:5px}
+  .tdsleg .vd{font-size:10.5px;padding:1px 6px}
   .morebtn{display:block;width:100%;margin-top:10px;padding:8px;background:var(--panel);
     border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--dim);font:inherit;
     font-size:12.5px;font-weight:500;cursor:pointer}
@@ -554,6 +578,9 @@ function KT_boot(D){
       <button data-tab="jira" type="button">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8.5 12.2l2.3 2.3 4.7-4.7"/></svg>
         SEO · Jira</button>
+      <button data-tab="tds" type="button">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h9"/><path d="M13 7l-2.5-2.5M13 7l-2.5 2.5"/><path d="M20 17h-9"/><path d="M11 17l2.5-2.5M11 17l2.5 2.5"/><circle cx="18" cy="7" r="2"/><circle cx="6" cy="17" r="2"/></svg>
+        ТДС-лінки</button>
     </nav>
     <main>
       <div class="hrow filters" id="filterRow">
@@ -744,6 +771,26 @@ function KT_boot(D){
         </div>
       </div>
 
+      <div id="tabTds" style="display:none">
+        <div class="kpis" id="tdsKpis"></div>
+        <div class="grid">
+          <div class="panel">
+            <div class="phead">
+              <div><h2>Перевірка ТДС-лінків</h2><div class="psub" id="tdsSub"></div></div>
+              <div class="tools">
+                <div class="seg alt" id="tdsFilt"><button data-f="bad">⚠ Проблемні</button><button data-f="all">Усі</button><button data-f="ok">Працюють</button></div>
+                <select class="pill" id="tdsGeo" title="Гео"></select>
+                <input class="search" id="tdsSearch" placeholder="бренд, партнер, хост…">
+                <button class="mbtn primary" id="tdsRun" type="button">Перевірити</button>
+              </div>
+            </div>
+            <div id="tdsDist"></div>
+            <div class="tbl-wrap" style="max-height:none"><table id="tdsTbl"></table></div>
+            <div class="hint" id="tdsFoot"></div>
+          </div>
+        </div>
+      </div>
+
       <div class="modal" id="refreshModal" hidden>
         <div class="mbox" role="dialog" aria-modal="true" aria-labelledby="mTitle">
           <div class="mhead"><h3 id="mTitle">Оновити дані</h3>
@@ -817,9 +864,10 @@ function KT_boot(D){
     document.getElementById("tabOv").style.display   = state.tab==="ov"?"":"none";
     document.getElementById("tabNet").style.display  = state.tab==="net"?"":"none";
     document.getElementById("tabJira").style.display = state.tab==="jira"?"":"none";
+    document.getElementById("tabTds").style.display  = state.tab==="tds"?"":"none";
     // На вкладці Jira період і команди з Keitaro ні до чого — ховаємо, щоб не
     // здавалось, ніби вони на щось впливають.
-    const j = state.tab==="jira";
+    const j = state.tab==="jira" || state.tab==="tds";
     document.getElementById("filterRow").style.display = j?"none":"flex";
     // на «Партнерках» пошук по сайтах/брендах ні до чого — там свій фільтр
     const ov = state.tab==="ov";
@@ -1811,6 +1859,165 @@ function KT_boot(D){
       const k=tr.dataset.k; if(netOpen.has(k)) netOpen.delete(k); else netOpen.add(k); renderNets();
     });
   }
+
+  // ── вкладка «ТДС-лінки» ────────────────────────────────────────────────────
+  // Результати лежать окремим зашифрованим блобом (window.KT_TDS): їх пише
+  // workflow «Перевірка ТДС», а не нічна збірка, тож вони оновлюються окремо.
+  // Пароль той самий, він уже в sessionStorage після входу.
+  const TDSV = {
+    ok:       {t:"працює",        c:"ok",   d:"дійшли до сторінки, куди веде афка"},
+    mismatch: {t:"не туди",       c:"warn", d:"сторінка відкрилась, але ланцюг не пройшов через посилання афки"},
+    blocked:  {t:"блокує",        c:"bad",  d:"на шляху стоїть захист, капча або бан"},
+    http:     {t:"помилка",       c:"bad",  d:"сервер віддав помилку"},
+    dead:     {t:"не відкрилась", c:"bad",  d:"не достукались до хоста"},
+    loop:     {t:"петля",         c:"warn", d:"редіректи ходять по колу"},
+    proxy:    {t:"проксі",        c:"mute", d:"не вина лінка: не вийшло вийти з цієї країни"},
+    skip:     {t:"пропущено",     c:"mute", d:"у рядку незрозуміле гео"},
+  };
+  const TDS_ORDER = ["blocked","dead","http","mismatch","loop","ok","proxy","skip"];
+  const TDSC = {ok:"var(--good)",bad:"var(--crit)",warn:"var(--warn)",mute:"var(--border-strong)"};
+
+  let TDS=null, tdsState="idle", tdsFilt="bad", tdsQ="", tdsGeo="all";
+  const tdsOpen=new Set();
+
+  async function loadTds(){
+    tdsState="loading";
+    try{
+      let pw=null; try{ pw=sessionStorage.getItem("kt_pw"); }catch(_){}
+      if(!pw) throw new Error("немає пароля в цій вкладці — перезайди");
+      TDS=await window.__ktDec(window.KT_TDS, pw);
+      tdsState="ready";
+    }catch(e){ tdsState="err"; TDS={err:String(e.message||e)}; }
+    renderTds();
+  }
+
+  function tdsInfo(html){
+    document.getElementById("tdsKpis").innerHTML="";
+    document.getElementById("tdsDist").innerHTML="";
+    document.getElementById("tdsTbl").innerHTML="";
+    document.getElementById("tdsSub").textContent="";
+    document.getElementById("tdsFoot").innerHTML=html;
+  }
+
+  function renderTds(){
+    const foot=document.getElementById("tdsFoot");
+    if(!window.KT_TDS){
+      return tdsInfo(
+        `<div style="font-size:13px;color:var(--dim);line-height:1.7">`+
+        `<b style="color:var(--fg)">Перевірки ще не було.</b><br>`+
+        `Запускається вона вручну: <b>Actions → «Перевірка ТДС-лінків» → Run workflow</b>. `+
+        `Кожен лінк відкривається з резидентської IP тієї країни, для якої він зроблений, `+
+        `і скрипт іде по всьому ланцюгу редіректів — включно з <span class="mono">meta refresh</span> і `+
+        `переходами зі скрипта — щоб побачити, куди реально потрапляє юзер.<br><br>`+
+        `Щоб воно запрацювало, у <b>Settings → Secrets → Actions</b> мають бути:<br>`+
+        `<span class="mono">KT_PROXY</span> — доступ до DataImpulse, `+
+        `<span class="mono">KT_GSHEET</span> — сервісний акаунт Google із доступом до таблиці з лінками.</div>`);
+    }
+    if(tdsState==="idle"){ loadTds(); return tdsInfo("Розшифровую результати…"); }
+    if(tdsState==="loading") return tdsInfo("Розшифровую результати…");
+    if(tdsState==="err") return tdsInfo(`<span style="color:var(--crit-ink)">Не вдалось прочитати результати: ${esc(TDS.err)}</span>`);
+
+    const rows=TDS.rows||[], chains=TDS.chains||[];
+    const okN=TDS.stat.ok||0, bad=rows.length-okN;
+    const when=new Date(TDS.checkedAt);
+    const ageH=(Date.now()-when.getTime())/3600e3;
+
+    document.getElementById("tdsKpis").innerHTML=[
+      {lbl:"Перевірено лінків",v:fmtInt(rows.length),c:"var(--s1)",
+       sub:TDS.total>rows.length?`з ${fmtInt(TDS.total)} у таблиці (ліміт прогону)`:"усі з таблиці"},
+      {lbl:"Доходять до сторінки",v:fmtInt(okN),c:okN?"var(--good)":"var(--crit)",
+       sub:rows.length?`${(okN/rows.length*100).toFixed(0)}% перевірених`:""},
+      {lbl:"Потребують уваги",v:fmtInt(bad),c:bad?"var(--crit)":"var(--good)",
+       sub:bad?"є що скинути афіліату":"усе чисто"},
+      {lbl:"Коли перевіряли",v:fmtAge(Date.now()-when.getTime()),
+       c:ageH>24*7?"var(--warn)":"var(--dim)",
+       sub:`${TDS.generated||""} · ${TDS.ua==="desktop"?"десктоп":"мобільний"}`},
+    ].map(k=>`<div class="kpi" style="--accent:${k.c}"><div class="lbl">${k.lbl}</div>`+
+      `<div class="val" style="color:${k.c}">${k.v}</div><div class="dl"><span class="sub">${esc(k.sub)}</span></div></div>`).join("");
+
+    // Смуга-розподіл: одразу видно співвідношення, не читаючи таблицю.
+    const present=TDS_ORDER.filter(v=>TDS.stat[v]>0);
+    const grp=[["bad","зламані"],["warn","під питанням"],["ok","доходять"],["mute","не перевірені"]]
+      .map(([c,t])=>[c,t,present.filter(v=>TDSV[v].c===c).reduce((n,v)=>n+TDS.stat[v],0)])
+      .filter(g=>g[2]>0);
+    document.getElementById("tdsDist").innerHTML=
+      `<div class="tdsbar">${grp.map(g=>`<i style="width:${g[2]/rows.length*100}%;background:${TDSC[g[0]]}" title="${g[1]}: ${g[2]}"></i>`).join("")}</div>`+
+      `<div class="tdsleg">${present.map(v=>`<span title="${esc(TDSV[v].d)}">`+
+        `<span class="vd ${TDSV[v].c}">${TDSV[v].t}</span> ${fmtInt(TDS.stat[v])}</span>`).join("")}</div>`;
+
+    // Гео-фільтр будуємо з того, що реально є в результатах
+    const geos=[...new Set(rows.map(r=>r[4]).filter(Boolean))].sort();
+    const sel=document.getElementById("tdsGeo");
+    if(sel.dataset.built!=="1"||sel.options.length!==geos.length+1){
+      sel.innerHTML=`<option value="all">Гео: усі</option>`+geos.map(g=>`<option value="${esc(g)}">${esc(g)}</option>`).join("");
+      sel.dataset.built="1"; sel.value=tdsGeo;
+    }
+
+    const q=tdsQ.toLowerCase();
+    let view=rows.map((r,i)=>({r,i})).filter(({r})=>{
+      if(tdsFilt==="ok"&&r[6]!=="ok") return false;
+      if(tdsFilt==="bad"&&r[6]==="ok") return false;
+      if(tdsGeo!=="all"&&r[4]!==tdsGeo) return false;
+      if(q&&!((r[2]+" "+r[3]+" "+r[7]+" "+r[12]).toLowerCase().includes(q))) return false;
+      return true;
+    });
+    // найболючіше зверху: спершу зламане, тоді «не туди», тоді решта
+    view.sort((a,b)=>TDS_ORDER.indexOf(a.r[6])-TDS_ORDER.indexOf(b.r[6])||String(a.r[2]).localeCompare(b.r[2],"uk"));
+
+    document.getElementById("tdsSub").textContent=
+      `${TDS.scope==="all"?"уся таблиця":"обране: "+TDS.scope} · ${TDS.tabs.length} ${plural(TDS.tabs.length,["вкладка","вкладки","вкладок"])}`;
+
+    const html=[`<thead><tr><th>Бренд</th><th>Партнер</th><th>Гео</th><th>Вердикт</th>`+
+      `<th>Де опинились</th><th class="r">Кроків</th><th class="r">Час</th><th>Що саме</th></tr></thead><tbody>`];
+    if(!view.length) html.push(`<tr><td colspan="8" style="color:var(--faint);padding:18px 10px">Під фільтр нічого не підпало.</td></tr>`);
+    for(const {r,i} of view){
+      const v=TDSV[r[6]]||TDSV.skip, open=tdsOpen.has(i);
+      html.push(`<tr class="tdsrow" tabindex="0" role="button" data-key="1" data-i="${i}">`+
+        `<td><b>${esc(r[2]||"—")}</b>${r[1]?` <span class="chip">${esc(r[1])}</span>`:""}</td>`+
+        `<td style="color:var(--dim)">${esc(r[3]||"—")}</td>`+
+        `<td><span class="chip geo"${r[5]&&r[4].toLowerCase()!==r[5]?` title="у таблиці: ${esc(r[4])}"`:""}>${esc((r[5]||r[4]||"—").toUpperCase())}</span></td>`+
+        `<td><span class="vd ${v.c}" title="${esc(v.d)}">${v.t}</span></td>`+
+        `<td class="mono" style="font-size:11.5px;color:var(--dim)">${esc(r[7]||"—")}</td>`+
+        `<td class="r mono">${r[9]}</td>`+
+        `<td class="r mono" style="color:var(--faint)">${r[10]?(r[10]/1000).toFixed(1)+" с":"—"}</td>`+
+        `<td style="color:var(--faint);font-size:12px">${esc(r[11]||"")}</td></tr>`);
+      if(open){
+        const ch=chains[i]||[];
+        html.push(`<tr><td colspan="8" style="background:var(--bg2);padding:10px 14px">`+
+          `<div style="font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--faint);font-weight:600;margin-bottom:4px">Куди вів лінк</div>`+
+          `<ul class="chain">`+
+          (ch.length?ch.map((c,k)=>{
+            const st=c[1], cls=st?("s"+String(st)[0]):"s0";
+            return `<li><span class="hop">${k+1}</span><span class="st ${cls}">${st||"—"}</span>`+
+              `<span><span class="u">${esc(c[0])}</span>${c[2]?`<span class="via">${esc(c[2])}</span>`:""}`+
+              `${c[4]?`<div class="ti">${esc(c[4])}</div>`:""}`+
+              `${c[5]?`<div class="ti" style="color:var(--crit-ink)">${esc(c[5])}</div>`:""}</span></li>`;
+          }).join(""):`<li><span class="hop"></span><span class="st"></span><span class="ti">Запит навіть не пішов.</span></li>`)+
+          `</ul>`+
+          (r[8]?`<div class="hint" style="margin:0">Очікували побачити в ланцюгу <span class="mono">${esc(r[8])}</span> — хост посилання афіліата з таблиці.</div>`:"")+
+          `</td></tr>`);
+      }
+    }
+    html.push("</tbody>");
+    document.getElementById("tdsTbl").innerHTML=html.join("");
+    document.querySelectorAll("#tdsTbl .tdsrow").forEach(tr=>tr.onclick=()=>{
+      const i=+tr.dataset.i; if(tdsOpen.has(i)) tdsOpen.delete(i); else tdsOpen.add(i); renderTds();
+    });
+
+    foot.innerHTML=`Показано ${fmtInt(view.length)} із ${fmtInt(rows.length)}. Клік по рядку — весь ланцюг редіректів. `+
+      `Перевірка йде з резидентської IP країни лінка, з ${TDS.ua==="desktop"?"десктопного":"мобільного"} браузера.`;
+  }
+
+  document.getElementById("tdsFilt").addEventListener("click",e=>{
+    const b=e.target.closest("button"); if(!b)return;
+    tdsFilt=b.dataset.f; [...e.currentTarget.children].forEach(x=>x.classList.toggle("on",x.dataset.f===tdsFilt));
+    tdsOpen.clear(); renderTds();
+  });
+  document.getElementById("tdsGeo").addEventListener("change",e=>{ tdsGeo=e.target.value; tdsOpen.clear(); renderTds(); });
+  let tdsTimer=null;
+  document.getElementById("tdsSearch").addEventListener("input",e=>{
+    tdsQ=e.target.value.trim(); clearTimeout(tdsTimer); tdsTimer=setTimeout(renderTds,180); });
+  [...document.getElementById("tdsFilt").children].forEach(x=>x.classList.toggle("on",x.dataset.f===tdsFilt));
   // ── ручне оновлення даних ──────────────────────────────────────────────────
   // Сторінка статична, бекенду немає. Тому два шляхи: посилання на GitHub
   // Actions (працює завжди) і запуск одним кліком, якщо користувач один раз
@@ -1854,7 +2061,12 @@ function KT_boot(D){
   const modal=document.getElementById("refreshModal");
   const mBody=document.getElementById("mBody");
   let polling=false;
-  const openModal=()=>{ modal.hidden=false; drawModal(); setTimeout(()=>{const i=mBody.querySelector("input,button,a");if(i)i.focus();},30); };
+  // Одне вікно на два сценарії: перезбір даних і запуск перевірки ТДС.
+  let modalKind="build";
+  const openModal=()=>{ modal.hidden=false;
+    document.getElementById("mTitle").textContent = modalKind==="tds"?"Перевірити ТДС-лінки":"Оновити дані";
+    (modalKind==="tds"?drawTdsModal:drawModal)();
+    setTimeout(()=>{const i=mBody.querySelector("input,button,a,select");if(i)i.focus();},30); };
   const closeModal=()=>{ if(!polling) modal.hidden=true; };
   document.getElementById("mClose").onclick=closeModal;
   modal.addEventListener("click",e=>{ if(e.target===modal) closeModal(); });
@@ -1948,8 +2160,68 @@ function KT_boot(D){
   }
 
   document.getElementById("refreshBtn").onclick=()=>{
+    modalKind="build";
     if(tokGet()){ openModal(); startBuild(); } else openModal();
   };
+  document.getElementById("tdsRun").onclick=()=>{ modalKind="tds"; openModal(); };
+
+  const tdsWfUrl=()=>{ const r=repoInfo();
+    return r?`https://github.com/${r.owner}/${r.repo}/actions/workflows/tds.yml`:"https://github.com"; };
+
+  function drawTdsModal(){
+    const has=!!tokGet();
+    const geos=TDS&&TDS.rows?[...new Set(TDS.rows.map(r=>r[4]).filter(Boolean))].sort():[];
+    mBody.innerHTML=
+      `<p>Перевірка відкриває кожен лінк з резидентської IP <b>тієї країни, для якої він зроблений</b>, `+
+      `і йде по всьому ланцюгу редіректів до фінальної сторінки. Прогін на всю таблицю — кілька хвилин.</p>`+
+      `<p class="mnote">Резидентський трафік платний, тому це не крутиться щоночі. Якщо треба швидко — звузь до одного гео.</p>`+
+      `<div class="mrow"><select class="pill" id="tScope"><option value="all">Усі гео</option>`+
+        geos.map(g=>`<option value="${esc(g)}">лише ${esc(g)}</option>`).join("")+`</select>`+
+      `<select class="pill" id="tUa"><option value="mobile">мобільний</option><option value="desktop">десктоп</option></select>`+
+      `<select class="pill" id="tLimit"><option value="400">до 400 лінків</option><option value="100">до 100</option><option value="50">до 50</option></select></div>`+
+      `<div class="mrow"><a class="mbtn" href="${tdsWfUrl()}" target="_blank" rel="noopener noreferrer">Відкрити GitHub Actions ↗</a>`+
+      `<span class="mnote">далі «Run workflow»</span></div>`+
+      (has
+        ? `<div class="mrow"><button class="mbtn primary" id="tRun" type="button">Запустити перевірку</button></div>`
+        : `<p class="mnote">Щоб запускати просто звідси, збережи токен GitHub у вікні «оновити» вгорі.</p>`);
+    const run=document.getElementById("tRun"); if(run) run.onclick=startTdsRun;
+  }
+
+  async function startTdsRun(){
+    polling=true;
+    const run=document.getElementById("tRun"); if(run) run.disabled=true;
+    const inputs={ scope:document.getElementById("tScope").value,
+                   ua:document.getElementById("tUa").value,
+                   limit:document.getElementById("tLimit").value };
+    try{
+      setStatus("Запускаю перевірку…");
+      const res=await gh("/actions/workflows/tds.yml/dispatches",{method:"POST",body:JSON.stringify({ref:"main",inputs})});
+      if(res.status===401||res.status===403){
+        setStatus(`Токен не підійшов (${res.status}). Потрібні права Actions — Read and write.`,"var(--crit-ink)"); return; }
+      if(res.status!==204){
+        setStatus(`GitHub відповів ${res.status}. Запусти через <a href="${tdsWfUrl()}" target="_blank" rel="noopener noreferrer">Actions ↗</a>.`,"var(--crit-ink)"); return; }
+      const t0=Date.now(); let runUrl=tdsWfUrl();
+      for(let i=0;i<150;i++){            // перевірка + перезбірка — до ~25 хвилин
+        await new Promise(r=>setTimeout(r, i<3?5000:10000));
+        let j=null;
+        try{ const q=await gh("/actions/workflows/tds.yml/runs?per_page=1");
+             if(q.ok) j=(await q.json()).workflow_runs?.[0]; }catch(e){}
+        const el=Math.round((Date.now()-t0)/1000);
+        const mm=Math.floor(el/60), ss=String(el%60).padStart(2,"0");
+        if(!j){ setStatus(`Чекаю на старт… ${mm}:${ss}`); continue; }
+        runUrl=j.html_url||runUrl;
+        if(j.status!=="completed"){ setStatus(`Перевіряю лінки… ${mm}:${ss} · <a href="${runUrl}" target="_blank" rel="noopener noreferrer">лог ↗</a>`); continue; }
+        if(j.conclusion==="success"){ setStatus("Готово. Перезавантажую сторінку…","var(--good-ink)"); setTimeout(()=>location.reload(),2500); }
+        else setStatus(`Прогін завершився як «${esc(j.conclusion||"?")}». <a href="${runUrl}" target="_blank" rel="noopener noreferrer">Відкрити лог ↗</a>`,"var(--crit-ink)");
+        return;
+      }
+      setStatus(`Перевірка ще триває — <a href="${runUrl}" target="_blank" rel="noopener noreferrer">лог ↗</a>. Сторінку можна буде оновити пізніше.`,"var(--warn)");
+    }catch(e){
+      setStatus(`Не вдалось: ${esc(String(e.message||e))}.`,"var(--crit-ink)");
+    }finally{
+      polling=false; const r2=document.getElementById("tRun"); if(r2) r2.disabled=false;
+    }
+  }
   refreshAge();
   setInterval(refreshAge, 60000);
 
@@ -2094,6 +2366,7 @@ function KT_boot(D){
     const rangeTxt = state.mode==="day"?`день ${D.days[state.dayIdx]}`:state.mode==="all"?"весь період":`останні ${state.mode} дн`;
     document.getElementById("chartTitle").textContent=`Трафік · ${rangeTxt}${scopeTxt}`;
     tblCap={site:TBL_STEP,brand:TBL_STEP}; mvCap=8;
+    if(state.tab==="tds"){ renderTds(); return; }
     if(state.tab==="jira"){ renderJira(); return; }
     if(state.tab==="net"){ renderNets(); return; }
     MV=moversData();
@@ -2139,8 +2412,10 @@ function KT_boot(D){
   const KDF = window.KT_KDF || { iter: 200000 };
   const b64ToBytes = (b64)=>{ const bin=atob(b64); const u=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) u[i]=bin.charCodeAt(i); return u; };
 
-  async function decrypt(password){
-    const raw = b64ToBytes(enc);
+  // Блоб із результатами перевірки ТДС шифрується тим самим паролем, але окремо:
+  // його пише інший воркфлоу. Тому розшифровка приймає сам base64, а не лише дані дашборда.
+  async function decryptB64(b64, password){
+    const raw = b64ToBytes(b64);
     const salt = raw.slice(0,16), iv = raw.slice(16,28), ct = raw.slice(28);
     const keyMat = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveKey"]);
     const key = await crypto.subtle.deriveKey(
@@ -2149,6 +2424,8 @@ function KT_boot(D){
     const plain = await crypto.subtle.decrypt({ name:"AES-GCM", iv }, key, ct);
     return JSON.parse(new TextDecoder().decode(plain));
   }
+  window.__ktDec = decryptB64;
+  const decrypt = (password) => decryptB64(enc, password);
 
   function loginScreen(msg){
     app.innerHTML = `<div class="empty">

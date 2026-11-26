@@ -11,7 +11,7 @@
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, join, isAbsolute, resolve } from "node:path";
-import { webcrypto as wc } from "node:crypto";
+import { encryptData } from "./crypto.mjs";
 
 // ── КОНФІГ (НЕ секретне) ─────────────────────────────────────────────────────
 const TZ          = "Europe/Kyiv";  // має збігатись з таймзоною звіту в Keitaro
@@ -49,21 +49,6 @@ async function loadConfig() {
   }
 }
 
-// AES-GCM + PBKDF2 → base64(salt|iv|ciphertext). Розшифровується в браузері.
-async function encryptData(jsonStr, password) {
-  const encText = new TextEncoder();
-  const salt = wc.getRandomValues(new Uint8Array(16));
-  const iv   = wc.getRandomValues(new Uint8Array(12));
-  const iter = 200000;
-  const keyMat = await wc.subtle.importKey("raw", encText.encode(password), "PBKDF2", false, ["deriveKey"]);
-  const key = await wc.subtle.deriveKey(
-    { name: "PBKDF2", salt, iterations: iter, hash: "SHA-256" },
-    keyMat, { name: "AES-GCM", length: 256 }, false, ["encrypt"]);
-  const ct = new Uint8Array(await wc.subtle.encrypt({ name: "AES-GCM", iv }, key, encText.encode(jsonStr)));
-  const out = new Uint8Array(salt.length + iv.length + ct.length);
-  out.set(salt, 0); out.set(iv, salt.length); out.set(ct, salt.length + iv.length);
-  return { b64: Buffer.from(out).toString("base64"), iter };
-}
 const log = (...a) => console.log("•", ...a);
 // У CI логи публічні → ховаємо адреси/хости з будь-якого тексту (напр. повідомлень помилок)
 let SECRET_HOSTS = [];
@@ -399,12 +384,22 @@ async function main() {
     teams, days, totals, camps, cd, offers, od, os, rel, positions, pages, nets, noff, jira,
   };
 
+  // Результати перевірки ТДС лежать окремим зашифрованим файлом: їх пише інший
+  // воркфлоу і в інший час, тож збірка просто проносить блоб у сторінку як є —
+  // розшифрує його браузер тим самим паролем.
+  let tdsBlob = "";
+  try {
+    tdsBlob = (await readFile(join(__dir, "data", "tds.enc"), "utf8")).trim();
+    log(`ТДС: підхопив минулу перевірку (${(tdsBlob.length / 1024).toFixed(0)} KB)`);
+  } catch { log("ТДС: перевірки ще не було — вкладка покаже інструкцію"); }
+
   const template = await readFile(join(__dir, "template.html"), "utf8");
   const jsonStr = JSON.stringify(DATA);
   let inject;
   if (PASSWORD) {
     const { b64, iter } = await encryptData(jsonStr, PASSWORD);
-    inject = `window.KT_ENC=${JSON.stringify(b64)};window.KT_KDF={iter:${iter}};`;
+    inject = `window.KT_ENC=${JSON.stringify(b64)};window.KT_KDF={iter:${iter}};`
+      + (tdsBlob ? `window.KT_TDS=${JSON.stringify(tdsBlob)};` : "");
     log(`🔒 дані зашифровано паролем (${(b64.length / 1024 / 1024).toFixed(2)} MB base64)`);
   } else {
     inject = "window.KT_DATA = " + jsonStr + ";";
