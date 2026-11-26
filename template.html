@@ -1868,7 +1868,7 @@ function KT_boot(D){
     ok:       {t:"працює",        c:"ok",   d:"юзер вийшов із трекера на офер"},
     lander:   {t:"ленд",          c:"ok",   d:"сторінка на домені трекера — локальний ленд, далі юзер іде кліком"},
     mismatch: {t:"не туди",       c:"warn", d:"вийшли на хост, якого немає серед оферів Keitaro"},
-    empty:    {t:"порожньо",      c:"bad",  d:"трекер нічого не віддав: під це гео й девайс не підібрався жоден потік"},
+    empty:    {t:"порожньо",      c:"bad",  d:"трекер нічого не віддав: під це гео й девайс не підібрався жоден потік. Перевірка ходить без реферера й міток — якщо потік вимагає їх, у живому трафіку може бути все гаразд"},
     blocked:  {t:"блокує",        c:"bad",  d:"на шляху стоїть захист, капча або бан"},
     http:     {t:"помилка",       c:"bad",  d:"сервер віддав помилку"},
     dead:     {t:"не відкрилась", c:"bad",  d:"не достукались до хоста"},
@@ -1921,8 +1921,8 @@ function KT_boot(D){
 
     const rows=TDS.rows||[], chains=TDS.chains||[];
     // Кампанії без гео не перевірялись — їх немає сенсу тримати у знаменнику.
-    const skipN=TDS.stat.skip||0;
-    const checkedN=rows.length-skipN;
+    const skipN=TDS.stat.skip||0, proxyN=TDS.stat.proxy||0;
+    const checkedN=rows.length-skipN-proxyN;
     const okN=(TDS.stat.ok||0)+(TDS.stat.lander||0), bad=checkedN-okN;
     const when=new Date(TDS.checkedAt);
     const ageH=(Date.now()-when.getTime())/3600e3;
@@ -1962,9 +1962,13 @@ function KT_boot(D){
     let view=rows.map((r,i)=>({r,i})).filter(({r})=>{
       // «skip» — це кампанія без гео в назві, а не зламаний лінк: у проблемні
       // вона не йде, інакше список тоне в тому, що нічого не означає.
+      // «skip» — кампанія без гео в назві, «proxy» — не вийшло вийти з країни.
+      // Ні те, ні те не є поломкою лінка, тож у «проблемні» вони не йдуть:
+      // інакше список тоне в тому, що нічого не означає.
       const fine = r[6]==="ok"||r[6]==="lander";
+      const moot = r[6]==="skip"||r[6]==="proxy";
       if(tdsFilt==="ok"&&!fine) return false;
-      if(tdsFilt==="bad"&&(fine||r[6]==="skip")) return false;
+      if(tdsFilt==="bad"&&(fine||moot)) return false;
       if(tdsGeo!=="all"&&r[4]!==tdsGeo) return false;
       if(q&&!((r[2]+" "+r[3]+" "+r[7]+" "+r[12]).toLowerCase().includes(q))) return false;
       return true;
@@ -2015,7 +2019,8 @@ function KT_boot(D){
 
     foot.innerHTML=`Показано ${fmtInt(view.length)} із ${fmtInt(rows.length)}. Клік по рядку — весь ланцюг редіректів. `+
       `Перевірка йде з резидентської IP країни з назви кампанії, з ${TDS.ua==="desktop"?"десктопного":"мобільного"} браузера.`+
-      (skipN?` У ${fmtInt(skipN)} ${plural(skipN,["кампанії","кампаній","кампаній"])} у назві немає гео — їх не перевіряли.`:"");
+      (skipN?` У ${fmtInt(skipN)} ${plural(skipN,["кампанії","кампаній","кампаній"])} у назві немає гео — їх не перевіряли.`:"")+
+      (proxyN?` ${fmtInt(proxyN)} ${plural(proxyN,["лінк","лінки","лінків"])} не вдалось перевірити через проксі — варто перезапустити.`:"");
   }
 
   document.getElementById("tdsFilt").addEventListener("click",e=>{
