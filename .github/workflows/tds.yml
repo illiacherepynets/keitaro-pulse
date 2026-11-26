@@ -20,6 +20,9 @@ on:
       selftest:
         description: 'Самоперевірка проксі замість лінків: список країн, напр. it,dk,es (таблиця не потрібна)'
         default: ''
+      probe:
+        description: 'Разовий зонд Keitaro: показати, які поля віддає API (нічого не перевіряє)'
+        default: ''
 
 permissions:
   contents: write     # треба, щоб покласти data/tds.enc назад у репозиторій
@@ -42,6 +45,7 @@ jobs:
           node-version: "20"
       - name: Перевірити лінки
         env:
+          KT_TEAMS: ${{ secrets.KT_TEAMS }}
           KT_PROXY: ${{ secrets.KT_PROXY }}
           KT_GSHEET: ${{ secrets.KT_GSHEET }}
           KT_PASSWORD: ${{ secrets.KT_PASSWORD }}
@@ -49,9 +53,10 @@ jobs:
           TDS_LIMIT: ${{ inputs.limit }}
           TDS_UA: ${{ inputs.ua }}
           TDS_SELFTEST: ${{ inputs.selftest }}
+          TDS_PROBE: ${{ inputs.probe }}
         run: node tds.mjs
       - name: Зберегти результат
-        if: inputs.selftest == ''
+        if: inputs.selftest == '' && inputs.probe == ''
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -62,7 +67,7 @@ jobs:
   publish:
     name: Перезібрати дашборд
     needs: check
-    if: inputs.selftest == ''
+    if: inputs.selftest == '' && inputs.probe == ''
     runs-on: ubuntu-latest
     timeout-minutes: 25
     concurrency:

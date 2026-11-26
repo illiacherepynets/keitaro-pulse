@@ -434,6 +434,48 @@ async function pool(items, n, fn) {
 
 const VERDICTS = ["ok", "mismatch", "blocked", "http", "dead", "loop", "proxy", "skip"];
 
+// Разовий зонд: що саме Keitaro знає про кампанії й домени. Потрібен, бо
+// вгадувати поля тут означало б будувати лінки, яких не існує. У публічний
+// лог ідуть лише назви полів і форма даних — ні хостів, ні аліасів.
+async function probeKeitaro() {
+  const raw = process.env.KT_TEAMS;
+  if (!raw) throw new Error("немає секрету KT_TEAMS");
+  const teams = JSON.parse(raw);
+  const T = (Array.isArray(teams) ? teams : teams.teams)[0];
+  const API = String(T.url).replace(/\/+$/, "") + "/admin_api/v1";
+  const headers = { "Api-Key": T.key, "Content-Type": "application/json" };
+  const get = async (path) => {
+    const r = await request(API + path, { headers }, "GET " + path);
+    if (!r.ok) return { err: r.status };
+    const j = await r.json();
+    return Array.isArray(j) ? j : (j.rows || j);
+  };
+  for (const path of ["/campaigns", "/domains", "/offers"]) {
+    const j = await get(path);
+    if (j.err) { log(`${path} → HTTP ${j.err}`); continue; }
+    const arr = Array.isArray(j) ? j : [j];
+    log(`${path} → ${arr.length} записів`);
+    if (!arr.length) continue;
+    log(`  поля: ${Object.keys(arr[0]).join(", ")}`);
+    // форма значень: тип і довжина, без самих значень
+    const shape = Object.entries(arr[0]).map(([k, v]) =>
+      `${k}:${v === null ? "null" : Array.isArray(v) ? `[${v.length}]` : typeof v === "object" ? "{}" : typeof v === "string" ? `str${v.length}` : typeof v}`);
+    log(`  форма: ${shape.join(" ")}`);
+    if (path === "/campaigns") {
+      const withAlias = arr.filter((c) => c.alias).length;
+      const withDomain = arr.filter((c) => c.domain_id).length;
+      const states = [...new Set(arr.map((c) => c.state))].join("/");
+      log(`  з alias: ${withAlias} · з domain_id: ${withDomain} · стани: ${states}`);
+      const linkish = Object.keys(arr[0]).filter((k) => /link|url|domain|alias/i.test(k));
+      log(`  схоже на посилання: ${linkish.join(", ") || "нічого"}`);
+      for (const k of linkish) {
+        const v = arr[0][k];
+        log(`    ${k} = ${typeof v === "string" ? (/^https?:\/\//.test(v) ? "URL(" + v.length + ")" : "«" + v.replace(/[^\/?=&.]/g, "•") + "»") : JSON.stringify(v)?.slice(0, 80)}`);
+      }
+    }
+  }
+}
+
 // Перевірка самого проксі, без таблиці. Потрібна, бо це єдиний шматок, який
 // неможливо прогнати локально: з пісочниці шлюз DataImpulse недосяжний.
 // Друкуємо країну й провайдера, але НЕ саму IP — у публічному лозі їй не місце.
@@ -471,6 +513,8 @@ async function main() {
   const limit = Math.max(1, Number(process.env.TDS_LIMIT || 400));
   const uaKind = (process.env.TDS_UA || "mobile").toLowerCase();
   const ua = uaKind === "desktop" ? UA_DESKTOP : UA_MOBILE;
+
+  if (process.env.TDS_PROBE) return probeKeitaro();
 
   const proxy = JSON.parse(process.env.KT_PROXY || "null");
   if (!proxy || !proxy.host || !proxy.user) throw new Error("немає секрету KT_PROXY");
