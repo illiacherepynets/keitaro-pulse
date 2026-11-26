@@ -380,6 +380,28 @@
   .mstatus{margin-top:14px;padding:11px 13px;border-radius:9px;background:var(--bg2);border:1px solid var(--border);
     font-size:12.5px;font-family:var(--mono);line-height:1.6}
 
+  /* ── вкладка Jira ──────────────────────────────────────────────────────── */
+  .jhead,.jrow{display:grid;grid-template-columns:1.7fr 2fr .8fr .9fr .8fr;gap:13px;align-items:center}
+  .jhead{font-size:9.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--faint);font-weight:700;
+    padding:0 9px 8px;margin-bottom:3px;border-bottom:1px solid var(--border)}
+  .jhead span:not(:first-child){text-align:right}
+  .jrow{padding:9px;border-radius:9px;cursor:pointer;transition:background .12s}
+  .jrow:hover,.jrow:focus-visible{background:rgba(79,157,255,.08)}
+  .jname{font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .jbar{display:flex;gap:2px;height:9px;align-items:center}
+  .jbar i{display:block;height:100%;border-radius:3px;min-width:0}
+  .jbar i.self{background:var(--s3)}
+  .jbar i.oth{background:var(--s4)}
+  .jparent{font-size:10.5px;color:var(--faint);margin-top:3px}
+  .jchk{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--dim);margin-top:12px;cursor:pointer}
+  .jchk input{accent-color:var(--s1);width:14px;height:14px;cursor:pointer}
+  .jpre{background:var(--bg2);border:1px solid var(--border);border-radius:9px;padding:11px 13px;
+    font-family:var(--mono);font-size:11.5px;color:var(--cyan);overflow-x:auto;white-space:pre;margin:0 0 12px}
+  @media(max-width:1050px){
+    .jhead,.jrow{grid-template-columns:1.5fr .8fr .9fr}
+    .jbar,.jhead span:nth-child(2),.jhead span:nth-child(5),.jrow>span:nth-child(5){display:none}
+  }
+
   .caret{color:var(--faint);font-size:10px;display:inline-block;width:10px}
   .ok{color:var(--good-ink);font-weight:700}
   tr.netrow{cursor:pointer}
@@ -502,7 +524,7 @@ function KT_boot(D){
       <div class="hrow">
         <div class="brand"><div class="logo">K</div>
           <div><h1>Keitaro · Pulse</h1><div class="sub">Локальна аналітика трафіку по днях</div></div></div>
-        <div class="seg" id="tabSeg"><button data-tab="ov">Огляд</button><button data-tab="net">Партнерки</button></div>
+        <div class="seg" id="tabSeg"><button data-tab="ov">Огляд</button><button data-tab="net">Партнерки</button><button data-tab="jira">SEO · Jira</button></div>
         <div class="seg tm" id="teamSeg" style="display:none"></div>
         <div class="seg" id="rangeSeg">
           <button data-m="all">Весь період</button><button data-m="90">90 дн</button>
@@ -661,6 +683,42 @@ function KT_boot(D){
         </div>
       </div>
 
+      <div id="tabJira" style="display:none">
+        <div class="kpis" id="jKpis"></div>
+        <div class="grid g3">
+          <div class="panel">
+            <div class="phead">
+              <div><h2>Хто що закрив</h2><div class="psub" id="jSub"></div>
+                <div class="legend"><span><i style="background:var(--s3)"></i>поставив собі сам</span><span><i style="background:var(--s4)"></i>поставили інші</span></div></div>
+              <div class="chead"><span class="clabel">Період</span>
+                <div class="seg alt" id="jWeek"><button data-w="last">Минулий тиждень</button><button data-w="this">Цей тиждень</button><button data-w="7">7 дн</button><button data-w="30">30 дн</button></div>
+              </div>
+            </div>
+            <div class="jhead" id="jHead"></div>
+            <div class="tlist" id="jPeople"></div>
+            <div class="hint">клік по рядку — показати задачі цієї людини в таблиці нижче</div>
+          </div>
+          <div class="panel">
+            <div class="phead"><div><h2>Де працювали</h2><div class="psub">Найчастіші мітки й епіки на закритих задачах</div></div></div>
+            <div class="dist" id="jTags"></div>
+          </div>
+        </div>
+        <div class="grid">
+          <div class="panel">
+            <div class="phead">
+              <div><h2>Задачі</h2><div class="psub" id="jTblSub"></div></div>
+              <div class="tools">
+                <div class="seg alt" id="jFilt"><button data-f="done">Закриті</button><button data-f="self">Поставили собі</button><button data-f="open">У роботі</button><button data-f="all">Усі</button></div>
+                <input class="search" id="jSearch" placeholder="у задачах…">
+              </div>
+            </div>
+            <div class="tbl-wrap"><table id="jTbl"></table></div>
+            <div id="jMore"></div>
+            <label class="jchk"><input type="checkbox" id="jHideDaily" checked> сховати щоденні <span class="mono">[Daily]</span></label>
+          </div>
+        </div>
+      </div>
+
       <div class="modal" id="refreshModal" hidden>
         <div class="mbox" role="dialog" aria-modal="true" aria-labelledby="mTitle">
           <div class="mhead"><h3 id="mTitle">Оновити дані</h3>
@@ -721,9 +779,16 @@ function KT_boot(D){
   const tabSeg=document.getElementById("tabSeg");
   function syncTab(){
     [...tabSeg.children].forEach(b=>b.classList.toggle("on",b.dataset.tab===state.tab));
-    document.getElementById("tabOv").style.display  = state.tab==="ov"?"":"none";
-    document.getElementById("tabNet").style.display = state.tab==="net"?"":"none";
+    document.getElementById("tabOv").style.display   = state.tab==="ov"?"":"none";
+    document.getElementById("tabNet").style.display  = state.tab==="net"?"":"none";
+    document.getElementById("tabJira").style.display = state.tab==="jira"?"":"none";
     document.getElementById("filterRow").style.display = state.tab==="ov"?"":"none";
+    // На вкладці Jira період і команди з Keitaro ні до чого — ховаємо, щоб не
+    // здавалось, ніби вони на щось впливають.
+    const j = state.tab==="jira";
+    document.getElementById("rangeSeg").style.display = j?"none":"";
+    document.getElementById("daySel").style.display   = j?"none":"";
+    teamSeg.style.display = (j||nTeams<2)?"none":"inline-flex";
   }
   tabSeg.addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b||b.dataset.tab===state.tab)return;
     state.tab=b.dataset.tab; syncTab(); render(); toTop(); });
@@ -746,6 +811,20 @@ function KT_boot(D){
   function syncCmp(){ [...cmpSeg.children].forEach(b=>b.classList.toggle("on",b.dataset.c===String(cmpMode))); }
   cmpSeg.addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b)return;
     cmpMode=b.dataset.c; syncCmp(); renderChart(); });
+
+  const jWeekSeg=document.getElementById("jWeek"), jFiltSeg=document.getElementById("jFilt");
+  function syncJ(){
+    [...jWeekSeg.children].forEach(b=>b.classList.toggle("on",b.dataset.w===jWeek));
+    [...jFiltSeg.children].forEach(b=>b.classList.toggle("on",b.dataset.f===jFilt));
+  }
+  jWeekSeg.addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b)return;
+    jWeek=b.dataset.w; jCap=30; syncJ(); renderJira(); });
+  jFiltSeg.addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b)return;
+    jFilt=b.dataset.f; jCap=30; syncJ(); renderJiraTable(); });
+  let jTimer=null;
+  document.getElementById("jSearch").addEventListener("input",e=>{ jQ=e.target.value.trim();
+    clearTimeout(jTimer); jTimer=setTimeout(()=>{ jCap=30; renderJiraTable(); },180); });
+  document.getElementById("jHideDaily").addEventListener("change",e=>{ jHideDaily=e.target.checked; jCap=30; renderJira(); });
 
   const mvSeg=document.getElementById("mvSeg");
   function syncMv(){ [...mvSeg.children].forEach(b=>b.classList.toggle("on",+b.dataset.k===mvMetric)); }
@@ -1835,6 +1914,140 @@ function KT_boot(D){
   refreshAge();
   setInterval(refreshAge, 60000);
 
+  // ── вкладка «SEO · Jira» ───────────────────────────────────────────────────
+  // Дані тягне збірка через REST API Jira (секрет KT_JIRA). MCP тут ні до чого —
+  // це протокол для агентів, а не для браузера.
+  // issue: [ключ, назва, виконавець, день закриття, день створення,
+  //         сам собі (0/1), тип, батьківська, мітки, постановник, статус]
+  const J = D.jira || null;
+  let jWeek="last", jFilt="done", jQ="", jHideDaily=true, jCap=30;
+
+  const isoDay=(d)=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  function jRange(){
+    const t=new Date(); t.setHours(0,0,0,0);
+    const dow=(t.getDay()+6)%7;                       // 0 = понеділок
+    const mon=new Date(t); mon.setDate(t.getDate()-dow);
+    if(jWeek==="this") return [isoDay(mon), isoDay(t), "цей тиждень"];
+    if(jWeek==="last"){
+      const a=new Date(mon); a.setDate(mon.getDate()-7);
+      const b=new Date(mon); b.setDate(mon.getDate()-1);
+      return [isoDay(a), isoDay(b), "минулий тиждень"];
+    }
+    const n=+jWeek||7, a=new Date(t); a.setDate(t.getDate()-n+1);
+    return [isoDay(a), isoDay(t), `останні ${n} дн`];
+  }
+  const jDM=(s)=> s ? s.slice(8,10)+"."+s.slice(5,7) : "—";
+  const isDaily=(s)=>/^\s*\[daily\]/i.test(s);
+
+  function renderJira(){
+    const box=document.getElementById("tabJira");
+    if(!J){
+      box.innerHTML=`<div class="grid"><div class="panel"><div class="phead"><div>
+        <h2>Jira ще не підключена</h2><div class="psub">Потрібен один секрет у репозиторії — далі дані тягнутиме та сама щоденна збірка</div></div></div>
+        <div class="mbody" style="padding:0">
+          <p>Сторінка статична, тож MCP їй недоступний — збірка ходить у Jira звичайним REST API.</p>
+          <p><b>1.</b> Створи токен: <a href="https://id.atlassian.com/manage-profile/security/api-tokens" target="_blank" rel="noopener noreferrer">id.atlassian.com → API tokens ↗</a></p>
+          <p><b>2.</b> Додай секрет <b>KT_JIRA</b> у Settings → Secrets → Actions зі значенням:</p>
+          <pre class="jpre">{"site":"ваш-сайт.atlassian.net","email":"ваша@пошта","token":"ATATT…","project":"SEO"}</pre>
+          <p class="mnote">Токена достатньо з правами читання. Збірка бере задачі за останні 35 днів: назву, виконавця, постановника, статус, дату закриття, мітки й батьківську задачу. Якщо Jira не відповість — решта звіту збереться як завжди.</p>
+        </div></div></div>`;
+      return;
+    }
+    const [from,to,label]=jRange();
+    const inR=(d)=> d && d>=from && d<=to;
+    const all=J.issues.filter(x=>!(jHideDaily && isDaily(x[1])));
+    const done=all.filter(x=>inR(x[3]));
+    const made=all.filter(x=>inR(x[4]));
+    const self=done.filter(x=>x[5]);
+
+    // ── показники ──
+    const who=new Set(done.filter(x=>x[2]>=0).map(x=>x[2]));
+    document.getElementById("jKpis").innerHTML=[
+      {lbl:"Закрито задач",v:fmtInt(done.length),c:"var(--s1)",sub:esc(label)+` · ${jDM(from)}–${jDM(to)}`},
+      {lbl:"Поставили собі самі",v:fmtInt(self.length),c:"var(--s3)",
+        sub:done.length?`${(self.length/done.length*100).toFixed(0)}% усіх закритих`:""},
+      {lbl:"Людей у роботі",v:fmtInt(who.size),c:"var(--s5)",sub:"мали хоч одну закриту задачу"},
+      {lbl:"Заведено нових",v:fmtInt(made.length),c:"var(--dim)",sub:"створено за цей самий період"},
+    ].map(k=>`<div class="kpi" style="--accent:${k.c}"><div class="lbl">${k.lbl}</div>`+
+      `<div class="val mono">${k.v}</div>${k.sub?`<div class="dl flat"><span class="sub">${k.sub}</span></div>`:""}</div>`).join("");
+
+    // ── по людях ──
+    const byP=new Map();
+    for(const x of done){ const p=x[2]; let a=byP.get(p); if(!a){a={done:0,self:0,made:0};byP.set(p,a);} a.done++; if(x[5])a.self++; }
+    for(const x of made){ const p=x[2]; let a=byP.get(p); if(!a){a={done:0,self:0,made:0};byP.set(p,a);} a.made++; }
+    const rows=[...byP.entries()].sort((a,b)=>b[1].done-a[1].done || b[1].made-a[1].made);
+    const max=Math.max(1,...rows.map(r=>r[1].done));
+    document.getElementById("jSub").textContent=
+      `${esc(label)} · ${jDM(from)}–${jDM(to)} · ${fmtInt(done.length)} ${plural(done.length,["закрита задача","закриті задачі","закритих задач"])}`;
+    document.getElementById("jHead").innerHTML=
+      ["Виконавець","Закрито","Закрито","Собі сам","Завів"].map((h,i)=>`<span>${i===1?"":h}</span>`).join("");
+    document.getElementById("jPeople").innerHTML = rows.length ? rows.map(([p,a])=>{
+      const nm=p>=0?(J.people[p]||"—"):"— без виконавця —";
+      const w=a.done/max*100, sw=a.done?a.self/a.done*w:0;
+      return `<div class="jrow" tabindex="0" role="button" data-key="1" data-p="${p}">
+        <span class="jname">${esc(nm)}</span>
+        <span class="jbar" title="${a.self} поставив собі, ${a.done-a.self} поставили інші">
+          <i class="self" style="width:${sw.toFixed(1)}%"></i><i class="oth" style="width:${(w-sw).toFixed(1)}%"></i></span>
+        <span class="tnum">${fmtInt(a.done)}</span>
+        <span class="tnum" style="color:var(--s3)">${fmtInt(a.self)}</span>
+        <span class="tnum" style="color:var(--dim)">${a.made?fmtInt(a.made):"<span class='zero'>—</span>"}</span></div>`;
+    }).join("") : `<div class="mvempty">За цей період нічого не закрито.</div>`;
+    document.querySelectorAll("#jPeople .jrow").forEach(el=>el.onclick=()=>{
+      const nm=el.querySelector(".jname").textContent;
+      const inp=document.getElementById("jSearch"); inp.value=nm; jQ=nm.toLowerCase(); jCap=30; renderJiraTable();
+    });
+
+    // ── де саме працювали: мітки та батьківські задачі ──
+    const tags=new Map();
+    for(const x of done){ for(const l of (x[8]||[])) tags.set(l,(tags.get(l)||0)+1);
+      if(x[7]) tags.set("◆ "+x[7],(tags.get("◆ "+x[7])||0)+1); }
+    const tl=[...tags.entries()].sort((a,b)=>b[1]-a[1]).slice(0,12);
+    const tmax=Math.max(1,...tl.map(x=>x[1]));
+    document.getElementById("jTags").innerHTML = tl.length
+      ? `<div class="dist-head"><span>мітка або епік</span><span>задач</span></div>`+tl.map(([n,c])=>
+          `<div class="row"><div class="name" title="${esc(n)}">${esc(n)}</div>
+           <div class="track"><div class="fill" style="width:${c/tmax*100}%"></div></div>
+           <div class="v mono">${fmtInt(c)}</div></div>`).join("")
+      : `<div class="mvempty">Міток і епіків на закритих задачах немає.</div>`;
+
+    renderJiraTable();
+  }
+
+  function renderJiraTable(){
+    if(!J) return;
+    const [from,to]=jRange();
+    const inR=(d)=> d && d>=from && d<=to;
+    let rows=J.issues.filter(x=>!(jHideDaily && isDaily(x[1])));
+    if(jFilt==="done") rows=rows.filter(x=>inR(x[3]));
+    else if(jFilt==="self") rows=rows.filter(x=>inR(x[3]) && x[5]);
+    else if(jFilt==="open") rows=rows.filter(x=>!x[3]);
+    else rows=rows.filter(x=>inR(x[3])||inR(x[4]));
+    if(jQ){ const q=jQ.toLowerCase();
+      rows=rows.filter(x=>x[1].toLowerCase().includes(q)||x[0].toLowerCase().includes(q)
+        ||(x[2]>=0&&(J.people[x[2]]||"").toLowerCase().includes(q))
+        ||(x[8]||[]).some(l=>l.toLowerCase().includes(q))); }
+    rows.sort((a,b)=> (b[3]||b[4]).localeCompare(a[3]||a[4]));
+    const total=rows.length, shown=rows.slice(0,jCap);
+    document.getElementById("jTblSub").textContent =
+      `${fmtInt(total)} ${plural(total,["задача","задачі","задач"])}${total>shown.length?` · показано ${shown.length}`:""}`;
+    document.getElementById("jTbl").innerHTML=
+      `<thead><tr><th style="text-align:left">Ключ</th><th style="text-align:left">Задача</th>`+
+      `<th style="text-align:left">Виконавець</th><th>Закрито</th><th style="text-align:left">Поставив</th><th style="text-align:left">Мітки</th></tr></thead>`+
+      `<tbody>${shown.length?shown.map(x=>{
+        const nm=x[2]>=0?(J.people[x[2]]||""):"—", rp=x[9]>=0?(J.people[x[9]]||""):"—";
+        return `<tr class="nolink">
+          <td style="text-align:left"><a href="https://${esc(J.site)}/browse/${esc(x[0])}" target="_blank" rel="noopener noreferrer" class="mono">${esc(x[0])}</a></td>
+          <td style="text-align:left;white-space:normal;max-width:520px">${esc(x[1])}${x[7]?`<div class="jparent">◆ ${esc(x[7])}</div>`:""}</td>
+          <td style="text-align:left">${esc(nm)}</td>
+          <td class="mono ${x[3]?"":"zero"}">${x[3]?jDM(x[3]):"у роботі"}</td>
+          <td style="text-align:left">${x[5]?`<span class="badge" style="color:var(--s3);border-color:rgba(0,168,136,.35)">сам собі</span>`:esc(rp)}</td>
+          <td style="text-align:left">${(x[8]||[]).slice(0,4).map(l=>`<span class="chip">${esc(l)}</span>`).join(" ")||"<span class='zero'>—</span>"}</td></tr>`;
+      }).join(""):`<tr class="nolink"><td colspan="6" class="emptycell">Нічого не знайдено.</td></tr>`}</tbody>`;
+    const more=document.getElementById("jMore");
+    more.innerHTML = total>shown.length ? `<button class="morebtn" type="button">показати ще ${fmtInt(Math.min(total-shown.length,50))} з ${fmtInt(total-shown.length)} ↓</button>` : "";
+    const mb=more.querySelector("button"); if(mb) mb.onclick=()=>{ jCap+=50; renderJiraTable(); };
+  }
+
   function render(){
     setRange(); renderChip();
     const f=state.filter;
@@ -1842,6 +2055,7 @@ function KT_boot(D){
     const rangeTxt = state.mode==="day"?`день ${D.days[state.dayIdx]}`:state.mode==="all"?"весь період":`останні ${state.mode} дн`;
     document.getElementById("chartTitle").textContent=`Трафік · ${rangeTxt}${scopeTxt}`;
     tblCap={site:TBL_STEP,brand:TBL_STEP}; mvCap=8;
+    if(state.tab==="jira"){ renderJira(); return; }
     if(state.tab==="net"){ renderNets(); return; }
     MV=moversData();
     renderKpis(); renderDigest(); renderTeamCards(); renderMovers();
@@ -1859,10 +2073,11 @@ function KT_boot(D){
     });
     const tm=h.match(/(?:^|;)team:(\d+)/); if(tm){ const t=+tm[1]; if(t>=0&&t<nTeams) state.team=t; }
     if(/(?:^|;)tab:net/.test(h)) state.tab="net";
+    if(/(?:^|;)tab:jira/.test(h)) state.tab="jira";
     if(state.filter.q) computeFilter();
   })();
 
-  syncSeg(); syncFilterUI(); syncTeam(); syncMv(); syncCmp(); syncTab(); syncNetFilt(); render();
+  syncSeg(); syncFilterUI(); syncTeam(); syncMv(); syncCmp(); syncTab(); syncNetFilt(); syncJ(); render();
 }
 </script>
 <script>

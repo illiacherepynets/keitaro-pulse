@@ -174,6 +174,87 @@ function makeClient(url, key) {
   return { report, apiGet, reportOverChunks };
 }
 
+// ── Jira: що робили сеошники ─────────────────────────────────────────────────
+// Сторінка статична, MCP вона не вміє — тому збірка ходить звичайним REST API
+// з токеном із секрету KT_JIRA:
+//   {"site":"xxx.atlassian.net","email":"...","token":"...","project":"SEO"}
+// Якщо секрету немає або Jira недоступна — решта звіту збирається як раніше,
+// а вкладка показує інструкцію замість даних.
+const JIRA_DAYS = 35;
+const JIRA_FIELDS = ["summary","status","assignee","reporter","created",
+  "statuscategorychangedate","issuetype","parent","labels"];
+
+async function fetchJira(fmtDayTz) {
+  const raw = process.env.KT_JIRA;
+  if (!raw) { log("Jira: секрет KT_JIRA не заданий — вкладка покаже інструкцію"); return null; }
+  let cfg; try { cfg = JSON.parse(raw); } catch { log("Jira: KT_JIRA не є JSON"); return null; }
+  const site = String(cfg.site || "").replace(/^https?:\/\//, "").replace(/\/+$/, "");
+  const project = String(cfg.project || "SEO");
+  if (!site || !cfg.email || !cfg.token) { log("Jira: у KT_JIRA бракує site, email або token"); return null; }
+  SECRET_HOSTS.push(site);
+  const headers = {
+    Authorization: "Basic " + Buffer.from(`${cfg.email}:${cfg.token}`).toString("base64"),
+    Accept: "application/json", "Content-Type": "application/json",
+  };
+  const jql = `project = "${project}" AND (statusCategoryChangedDate >= -${JIRA_DAYS}d OR created >= -${JIRA_DAYS}d) ORDER BY statusCategoryChangedDate DESC`;
+
+  const rows = [];
+  try {
+    // Новий ендпоінт шукає з nextPageToken; на старіших інстансах його немає,
+    // тому тихо відкочуємось на /search зі startAt.
+    let token = null, guard = 0, legacy = false;
+    do {
+      let res, j;
+      if (!legacy) {
+        res = await request(`https://${site}/rest/api/3/search/jql`, {
+          method: "POST", headers,
+          body: JSON.stringify({ jql, fields: JIRA_FIELDS, maxResults: 100, ...(token ? { nextPageToken: token } : {}) }),
+        }, "jira search");
+        if (res.status === 404 || res.status === 410) { legacy = true; continue; }
+      } else {
+        res = await request(`https://${site}/rest/api/3/search`, {
+          method: "POST", headers,
+          body: JSON.stringify({ jql, fields: JIRA_FIELDS, maxResults: 100, startAt: rows.length }),
+        }, "jira search (legacy)");
+      }
+      if (!res.ok) throw new Error(`jira → HTTP ${res.status}: ${(await res.text()).slice(0, 160)}`);
+      j = await res.json();
+      const batch = j.issues || [];
+      rows.push(...batch);
+      token = legacy ? null : (j.isLast ? null : (j.nextPageToken || null));
+      if (legacy && batch.length === 100 && rows.length < (j.total || 0)) token = "more";
+    } while (token && ++guard < 30);
+  } catch (e) { log(`Jira: ${redact(String(e.message)).slice(0, 160)} — вкладка лишиться без даних`); return null; }
+
+  const people = [], pSlot = new Map();
+  const slotP = (n) => { const k = n || "— без виконавця —";
+    if (!pSlot.has(k)) { pSlot.set(k, people.length); people.push(k); } return pSlot.get(k); };
+  const dayOf = (iso) => { if (!iso) return ""; const d = new Date(iso); return isNaN(d) ? "" : fmtDayTz(d); };
+
+  // issues: [key, назва, виконавець, день закриття, день створення,
+  //          сам собі (0/1), тип, батьківська задача, мітки, постановник]
+  const issues = rows.map((it) => {
+    const f = it.fields || {};
+    const a = f.assignee, r = f.reporter;
+    const done = f.status && f.status.statusCategory && f.status.statusCategory.key === "done";
+    return [
+      it.key, String(f.summary || ""),
+      a ? slotP(a.displayName) : -1,
+      done ? dayOf(f.statuscategorychangedate) : "",
+      dayOf(f.created),
+      (a && r && a.accountId === r.accountId) ? 1 : 0,
+      (f.issuetype && f.issuetype.name) || "",
+      (f.parent && f.parent.fields && f.parent.fields.summary) || "",
+      (f.labels || []).slice(0, 6),
+      r ? slotP(r.displayName) : -1,
+      (f.status && f.status.name) || "",
+    ];
+  });
+  const doneN = issues.filter((x) => x[3]).length;
+  log(`Jira: ${issues.length} задач за ${JIRA_DAYS} дн (закритих: ${doneN}) · людей: ${people.length}`);
+  return { site, project, days: JIRA_DAYS, people, issues };
+}
+
 async function main() {
   const t0 = Date.now();
   const { teams: TEAMS, password: PASSWORD } = await loadConfig();
@@ -185,6 +266,10 @@ async function main() {
   const toDay = INCLUDE_TODAY ? fmtDayTz(now) : fmtDayTz(yst);
   let searchFrom = SEARCH_FROM;
   if (DAYS_BACK) { const d = new Date(now); d.setDate(d.getDate() - DAYS_BACK); searchFrom = fmtDayTz(d); }
+
+  // Jira не критична для звіту — беремо її першою, щоб у логах було видно,
+  // чи вона взагалі відповіла, але падіння не зупиняє збірку.
+  const jira = await fetchJira(fmtDayTz);
 
   // ── 1) Тягнемо сирі дані по кожній команді ─────────────────────────────────
   const raw = [];
@@ -311,7 +396,7 @@ async function main() {
     generated: new Date().toLocaleString("uk-UA", { timeZone: TZ }),
     builtAt: new Date().toISOString(),   // машинна мітка: скільки даним годин
     range: { from: fromDay, to: lastDay },
-    teams, days, totals, camps, cd, offers, od, os, rel, positions, pages, nets, noff,
+    teams, days, totals, camps, cd, offers, od, os, rel, positions, pages, nets, noff, jira,
   };
 
   const template = await readFile(join(__dir, "template.html"), "utf8");
