@@ -169,7 +169,8 @@ async function loadLinks(scope) {
   const meta = await sheetsGet(`${id}?fields=properties.title,sheets.properties.title`, token);
   const all = (meta.sheets || []).map((s) => s.properties.title);
   const take = all.filter((t) => wantTab(t, scope));
-  log(`Таблиця «${meta.properties?.title || "?"}»: вкладок ${all.length}, беремо ${take.length}`);
+  log(CI ? `Таблиця: вкладок ${all.length}, беремо ${take.length}`
+         : `Таблиця «${meta.properties?.title || "?"}»: вкладок ${all.length}, беремо ${take.length}`);
   if (!take.length) throw new Error(`жодна вкладка не підійшла під scope="${scope}"`);
 
   const links = [];
@@ -179,7 +180,7 @@ async function loadLinks(scope) {
     const j = await sheetsGet(`${id}/values:batchGet?${qs}&majorDimension=ROWS`, token);
     (j.valueRanges || []).forEach((vr, k) => {
       const { links: L, why } = parseTab(part[k], vr.values || []);
-      if (why) log(`  ⚠ ${part[k]}: ${why}`);
+      if (why) log(CI ? `  ⚠ одну вкладку пропущено: ${why}` : `  ⚠ ${part[k]}: ${why}`);
       links.push(...L);
     });
   }
@@ -407,7 +408,14 @@ function ccOf(raw, proxy) {
 // Логи Actions публічні, а ТДС-лінки й бренди — ні. Тому в CI друкуємо лише
 // цифри: що саме зламалось, видно в дашборді, який і так під паролем.
 const CI = !!process.env.CI;
-const hide = (s) => (CI ? "***" : String(s));
+// Ховаємо адреси й хости, але НЕ сам текст помилки: інакше причина падіння
+// перетворюється на «***», і з логу неможливо зрозуміти, чого бракує.
+const hide = (s) => {
+  if (!CI) return String(s);
+  return String(s)
+    .replace(/https?:\/\/[^\s/)"']+/gi, "http://***")
+    .replace(/\b\d{1,3}(\.\d{1,3}){3}\b/g, "***");
+};
 
 async function pool(items, n, fn) {
   const out = new Array(items.length);
