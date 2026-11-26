@@ -69,6 +69,7 @@
     .brand{margin-right:4px}
     main .phead{flex-direction:column;align-items:flex-start;gap:10px}
     main .phead .tools,main .phead .seg{width:100%}
+    main .phead .chead{justify-content:flex-start;width:100%}
     .brand .sub{display:none}
     .meta{display:none}
     .fq{min-width:170px}
@@ -192,6 +193,11 @@
   .tip b{color:var(--fg)} .tip .k{color:var(--dim)}
   .legend{display:flex;gap:16px;font-size:11.5px;color:var(--dim);margin-top:4px}
   .legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+  .legend i.dash{width:16px;height:0;border-radius:0;border-top:2px dashed var(--dim);vertical-align:3px}
+  .chead{display:flex;align-items:center;gap:9px;flex-wrap:wrap;justify-content:flex-end}
+  .clabel{font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--faint);font-weight:700}
+  .psubdim{color:var(--faint);font-weight:500}
+  #chartSub b{color:var(--fg)}
   .hint{font-size:11px;color:var(--faint);margin-top:10px;text-align:center}
 
   /* ── динаміка: картки команд, дайджест, рух брендів ─────────────────────── */
@@ -563,7 +569,12 @@ function KT_boot(D){
         <div class="panel">
           <div class="phead">
             <div><h2 id="chartTitle">Трафік по днях</h2>
-              <div class="psub">Дві панелі на спільній осі часу. Шкали різні, тож висоту ліній між панелями не порівнюють — читають форму кожної окремо.</div></div>
+              <div class="psub" id="chartSub"></div>
+              <div class="legend" id="chartLegend"></div></div>
+            <div class="chead">
+              <span class="clabel">Порівняти з</span>
+              <div class="seg alt" id="cmpSeg"><button data-c="prev">Попереднім періодом</button><button data-c="7">−7 дн</button><button data-c="30">−30 дн</button><button data-c="off">Вимк.</button></div>
+            </div>
           </div>
           <div class="chart-wrap" id="chartWrap"></div>
           <div class="hint">клік по графіку → цей день</div>
@@ -731,6 +742,11 @@ function KT_boot(D){
     if(key!=null){ const el=document.querySelector(`.trow[data-tm="${key}"]`); if(el) el.focus(); }
   }
 
+  const cmpSeg=document.getElementById("cmpSeg");
+  function syncCmp(){ [...cmpSeg.children].forEach(b=>b.classList.toggle("on",b.dataset.c===String(cmpMode))); }
+  cmpSeg.addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b)return;
+    cmpMode=b.dataset.c; syncCmp(); renderChart(); });
+
   const mvSeg=document.getElementById("mvSeg");
   function syncMv(){ [...mvSeg.children].forEach(b=>b.classList.toggle("on",+b.dataset.k===mvMetric)); }
   mvSeg.addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b)return; mvMetric=+b.dataset.k; syncMv(); renderMovers(); });
@@ -809,76 +825,142 @@ function KT_boot(D){
       .map(([k,v])=>`<span>${k} <b>${v}</b></span>`).join("");
   }
   // ── трафік по днях ───────────────────────────────────────────────────────────
-  // Було: кліки й конверсії на одному полі з двома різними масштабами. Такий
-  // графік вигадує кореляцію, якої в даних немає, — тому тепер це дві панелі
-  // на спільній осі часу, кожна зі своєю шкалою і своїм підписом.
+  // Кліки й конверсії мають різні порядки величин, тож вони на двох панелях зі
+  // спільною віссю часу — один графік із двома шкалами вигадував би кореляцію,
+  // якої в даних немає.
+  //
+  // Поверх кожної панелі накладається той самий відрізок іншого періоду:
+  // поточний — кольором, минулий — сірим пунктиром. Минулий тут контекст, а не
+  // друга серія, тому він приглушений: «виділи одне, решту в сірий».
+  let cmpMode="prev";                 // prev | 7 | 30 | off
+  const CMP_LBL={prev:"попередній період", 7:"тиждень тому", 30:"місяць тому"};
+  const CMP_VS ={prev:"проти попереднього періоду", 7:"проти того ж відрізка тижнем раніше",
+                 30:"проти того ж відрізка місяцем раніше"};
+
+  function cmpShift(){                // на скільки днів зсунути вікно порівняння
+    if(cmpMode==="off") return 0;
+    if(cmpMode==="prev") return state.toIdx-state.fromIdx+1;
+    return +cmpMode;
+  }
+
   function renderChart(){
     const wrap=document.getElementById("chartWrap");
     const per=seriesData();
-    const s=[]; for(let i=state.fromIdx;i<=state.toIdx;i++) s.push({idx:i,day:D.days[i],clicks:per[i][0],conv:per[i][1],rev:per[i][5]});
+    const s=[]; for(let i=state.fromIdx;i<=state.toIdx;i++)
+      s.push({idx:i,day:D.days[i],clicks:per[i][0],conv:per[i][1],rev:per[i][5]});
     const n=s.length;
-    // SVG масштабується рівномірно, тож на вузькій картці широка пропорція
-    // перетворювала графік на смужку 105px заввишки. Міняємо саму пропорцію.
+    const k=cmpShift();
+    // Відрізок для порівняння: ті самі позиції, але зсунуті назад на k днів.
+    const cmp = k>0 ? s.map(d=>{ const j=d.idx-k; return j>=0
+      ? {day:D.days[j],clicks:per[j][0],conv:per[j][1],rev:per[j][5]} : null; }) : [];
+    const hasCmp = k>0 && cmp.some(Boolean);
+
     const narrow=(wrap.clientWidth||900)<620;
-    const W=narrow?460:900, PL=narrow?44:54, PR=narrow?10:14, PT=22,
-          H1=narrow?132:128, GAP=narrow?30:30, H2=narrow?84:70, XB=22, H=PT+H1+GAP+H2+XB;
+    const W=narrow?460:900, PL=narrow?46:56, PR=narrow?44:62, PT=26,
+          H1=narrow?132:132, GAP=narrow?32:34, H2=narrow?104:108, XB=22, H=PT+H1+GAP+H2+XB;
     const iw=W-PL-PR, top2=PT+H1+GAP;
     const x=i=> n<=1 ? PL+iw/2 : PL+(i/(n-1))*iw;
-    // верхівка осі — кругле число: «16 054» на підписі читається як дані, хоч це просто межа
+
+    const STEPS=[1,1.1,1.2,1.3,1.4,1.5,1.6,1.8,2,2.2,2.5,3,3.5,4,4.5,5,6,7,8,9,10];
     const niceMax=(m)=>{ if(!(m>0)) return 1; const e=Math.pow(10,Math.floor(Math.log10(m))), f=m/e;
-      const s=f<=1?1:f<=1.2?1.2:f<=1.5?1.5:f<=2?2:f<=2.5?2.5:f<=3?3:f<=4?4:f<=5?5:f<=6?6:f<=8?8:10; return s*e; };
-    const m1=niceMax(Math.max(1,...s.map(d=>d.clicks))), m2=niceMax(Math.max(1,...s.map(d=>d.conv)));
+      return (STEPS.find(s=>f<=s+1e-9)||10)*e; };
+    const peak=(key)=>Math.max(1,...s.map(d=>d[key]),...(hasCmp?cmp.filter(Boolean).map(d=>d[key]):[]));
+    const m1=niceMax(peak("clicks")), m2=niceMax(peak("conv"));
     const y1=v=>PT+H1-(v/m1)*H1, y2=v=>top2+H2-(v/m2)*H2;
 
-    const path=(f)=>{ let p=`M ${x(0).toFixed(1)} ${f(0).toFixed(1)}`; for(let i=1;i<n;i++) p+=` L ${x(i).toFixed(1)} ${f(i).toFixed(1)}`; return p; };
-    const l1=path(i=>y1(s[i].clicks)), l2=path(i=>y2(s[i].conv));
-    const a1=l1+` L ${x(n-1).toFixed(1)} ${PT+H1} L ${x(0).toFixed(1)} ${PT+H1} Z`;
+    const line=(arr,f)=>{ let p="",open=false;
+      arr.forEach((d,i)=>{ if(!d){ open=false; return; }
+        p+=(open?" L ":` M `)+x(i).toFixed(1)+" "+f(d).toFixed(1); open=true; });
+      return p; };
+    const l1=line(s,d=>y1(d.clicks)), l2=line(s,d=>y2(d.conv));
+    const a1=n>1?l1+` L ${x(n-1).toFixed(1)} ${PT+H1} L ${x(0).toFixed(1)} ${PT+H1} Z`:"";
+    const c1=hasCmp?line(cmp,d=>y1(d.clicks)):"", c2=hasCmp?line(cmp,d=>y2(d.conv)):"";
 
-    // суцільні волосяні лінії сітки — пунктир читається як «поріг», хоч це просто сітка
+    // Вихідні тонують фон: тижневі провали перестають виглядати аномалією.
+    let bands="";
+    if(n<=120) for(let i=0;i<n;i++){
+      const wd=new Date(s[i].day+"T00:00:00Z").getUTCDay();
+      if(wd!==0&&wd!==6) continue;
+      const half=n>1?iw/(n-1)/2:iw/2;
+      const x0=Math.max(PL,x(i)-half), x1=Math.min(W-PR,x(i)+half);
+      bands+=`<rect x="${x0.toFixed(1)}" y="${PT}" width="${(x1-x0).toFixed(1)}" height="${H1}" fill="rgba(120,140,180,.055)"/>`+
+             `<rect x="${x0.toFixed(1)}" y="${top2}" width="${(x1-x0).toFixed(1)}" height="${H2}" fill="rgba(120,140,180,.055)"/>`;
+    }
+
     let grid="",ylab="";
-    for(const [top,hh,mx,fmt] of [[PT,H1,m1,fmtInt],[top2,H2,m2,fmtInt]]){
+    for(const [top,hh,mx] of [[PT,H1,m1],[top2,H2,m2]])
       for(let g=0;g<=2;g++){ const yy=top+(g/2)*hh;
         grid+=`<line x1="${PL}" y1="${yy}" x2="${W-PR}" y2="${yy}" stroke="var(--grid)" stroke-width="1"/>`;
-        ylab+=`<text x="${PL-9}" y="${yy+3}" text-anchor="end" fill="var(--faint)" font-size="9" font-family="var(--mono)">${fmt(mx*(1-g/2))}</text>`; }
-    }
-    let xlab="", step=Math.max(1,Math.ceil(n/(narrow?5:10)));
+        ylab+=`<text x="${PL-9}" y="${yy+3}" text-anchor="end" fill="var(--faint)" font-size="9" font-family="var(--mono)">${fmtInt(mx*(1-g/2))}</text>`; }
+
     const dm=d=>d.slice(8,10)+"."+d.slice(5,7);
+    let xlab="", step=Math.max(1,Math.ceil(n/(narrow?5:10)));
     for(let i=0;i<n;i+=step) xlab+=`<text x="${x(i).toFixed(1)}" y="${H-6}" text-anchor="middle" fill="var(--faint)" font-size="9" font-family="var(--mono)">${dm(s[i].day)}</text>`;
-    // одна точка не малюється лінією — показуємо маркер
-    const lone = n===1 ? `<circle cx="${x(0)}" cy="${y1(s[0].clicks)}" r="4" fill="var(--s1)"/><circle cx="${x(0)}" cy="${y2(s[0].conv)}" r="4" fill="var(--s2)"/>` : "";
+
+    // Підпис останнього значення просто біля лінії — щоб головне число не
+    // доводилось видобувати наведенням.
+    const last=s[n-1];
+    const endLbl=(yy,v,color)=>`<text x="${(W-PR+7)}" y="${yy+3.5}" fill="${color}" font-size="10.5" font-weight="700" font-family="var(--mono)">${fmtInt(v)}</text>`;
+    const dots = n===1
+      ? `<circle cx="${x(0)}" cy="${y1(s[0].clicks)}" r="4" fill="var(--s1)"/><circle cx="${x(0)}" cy="${y2(s[0].conv)}" r="4" fill="var(--s2)"/>`
+      : `<circle cx="${x(n-1)}" cy="${y1(last.clicks)}" r="3.5" fill="var(--s1)"/><circle cx="${x(n-1)}" cy="${y2(last.conv)}" r="3.5" fill="var(--s2)"/>`;
 
     wrap.innerHTML=`<svg class="chart" viewBox="0 0 ${W} ${H}">
       <defs><linearGradient id="ga" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stop-color="var(--s1)" stop-opacity=".34"/><stop offset="100%" stop-color="var(--s1)" stop-opacity="0"/></linearGradient></defs>
-      ${grid}${ylab}${xlab}
-      <text x="${PL}" y="${PT-8}" fill="var(--s1)" font-size="10.5" font-weight="700" letter-spacing=".5">КЛІКИ</text>
-      <text x="${PL}" y="${top2-8}" fill="var(--s2)" font-size="10.5" font-weight="700" letter-spacing=".5">КОНВЕРСІЇ</text>
-      <path d="${a1}" fill="url(#ga)"/>
+        <stop offset="0%" stop-color="var(--s1)" stop-opacity=".30"/><stop offset="100%" stop-color="var(--s1)" stop-opacity="0"/></linearGradient></defs>
+      ${bands}${grid}${ylab}${xlab}
+      <text x="${PL}" y="${PT-9}" fill="var(--s1)" font-size="10.5" font-weight="700" letter-spacing=".5">КЛІКИ</text>
+      <text x="${PL}" y="${top2-9}" fill="var(--s2)" font-size="10.5" font-weight="700" letter-spacing=".5">КОНВЕРСІЇ</text>
+      ${hasCmp?`<path d="${c1}" fill="none" stroke="var(--dim)" stroke-width="1.6" stroke-dasharray="5 4" opacity=".75" stroke-linejoin="round"/>`:""}
+      ${hasCmp?`<path d="${c2}" fill="none" stroke="var(--dim)" stroke-width="1.6" stroke-dasharray="5 4" opacity=".75" stroke-linejoin="round"/>`:""}
+      ${a1?`<path d="${a1}" fill="url(#ga)"/>`:""}
       <path d="${l1}" fill="none" stroke="var(--s1)" stroke-width="2" stroke-linejoin="round"/>
       <path d="${l2}" fill="none" stroke="var(--s2)" stroke-width="2" stroke-linejoin="round"/>
-      ${lone}
+      ${dots}${endLbl(y1(last.clicks),last.clicks,"var(--s1)")}${endLbl(y2(last.conv),last.conv,"var(--s2)")}
       <line id="cursor" x1="0" y1="${PT}" x2="0" y2="${top2+H2}" stroke="var(--border-hi)" stroke-width="1" style="opacity:0"/>
       <circle id="d1" r="4" fill="var(--s1)" stroke="var(--panel-solid)" stroke-width="2" style="opacity:0"/>
       <circle id="d2" r="4" fill="var(--s2)" stroke="var(--panel-solid)" stroke-width="2" style="opacity:0"/>
       <rect id="hit" x="${PL}" y="${PT}" width="${iw}" height="${top2+H2-PT}" fill="transparent"/>
       </svg><div class="tip" id="tip"></div>`;
 
+    // легенда і підсумок над графіком
+    const sum=(arr,key)=>arr.reduce((t,d)=>t+(d?d[key]:0),0);
+    const curC=sum(s,"clicks"), curV=sum(s,"conv");
+    const pc=(a,b)=> b>0 ? `${a>=b?"+":"−"}${Math.abs((a-b)/b*100).toFixed(0)}%` : "—";
+    const cls=(a,b)=> a>b?"up":(a<b?"down":"flat");
+    document.getElementById("chartLegend").innerHTML=
+      `<span><i style="background:var(--s1)"></i>Кліки</span><span><i style="background:var(--s2)"></i>Конверсії</span>`+
+      (hasCmp?`<span><i class="dash"></i>${esc(CMP_LBL[cmpMode]||"порівняння")}</span>`:"");
+    document.getElementById("chartSub").innerHTML = hasCmp
+      ? `Кліки <b class="mono">${fmtInt(curC)}</b> <span class="${cls(curC,sum(cmp,"clicks"))}">${pc(curC,sum(cmp,"clicks"))}</span> · `+
+        `конверсії <b class="mono">${fmtInt(curV)}</b> <span class="${cls(curV,sum(cmp,"conv"))}">${pc(curV,sum(cmp,"conv"))}</span> `+
+        `<span class="psubdim">${esc(CMP_VS[cmpMode]||"проти минулого відрізка")} — він пунктиром на графіку</span>`
+      : (k>0 ? `<span class="psubdim">для цього порівняння бракує історії — візьми коротший період</span>`
+             : `<span class="psubdim">шкали панелей різні, тож висоти ліній між ними не порівнюють</span>`);
+
     const svg=wrap.querySelector("svg"),tip=wrap.querySelector("#tip"),cursor=wrap.querySelector("#cursor"),
           hit=wrap.querySelector("#hit"),d1=wrap.querySelector("#d1"),d2=wrap.querySelector("#d2");
     const idxAt=(ev)=>{ const r=svg.getBoundingClientRect(); const px=(ev.clientX-r.left)/r.width*W;
       return [Math.max(0,Math.min(n-1,Math.round((px-PL)/iw*(n-1)))), r]; };
+    const row=(name,color,cur,prev)=>{
+      let t=`<span class="k">${name}:</span> <b class="mono" style="color:${color}">${fmtInt(cur)}</b>`;
+      if(prev!=null){ const d=cur-prev;
+        t+=` <span class="mono ${d>0?"up":(d<0?"down":"flat")}">${d>0?"▲":(d<0?"▼":"—")} ${prev>0?`${d>=0?"+":"−"}${Math.abs(d/prev*100).toFixed(0)}%`:fmtInt(Math.abs(d))}</span>`; }
+      return t;
+    };
     hit.addEventListener("mousemove",ev=>{
-      const [i,r]=idxAt(ev), d=s[i], cx=x(i);
+      const [i,r]=idxAt(ev), d=s[i], c=hasCmp?cmp[i]:null, cx=x(i);
       cursor.setAttribute("x1",cx); cursor.setAttribute("x2",cx); cursor.style.opacity=1;
       d1.setAttribute("cx",cx); d1.setAttribute("cy",y1(d.clicks)); d1.style.opacity=1;
       d2.setAttribute("cx",cx); d2.setAttribute("cy",y2(d.conv));  d2.style.opacity=1;
       tip.style.opacity=1;
-      tip.style.left=Math.min(r.width-176,Math.max(0,(cx/W)*r.width+12))+"px";
-      tip.style.top=Math.max(2,Math.min(r.height-96,ev.clientY-r.top-54))+"px";
+      tip.style.left=Math.min(r.width-190,Math.max(0,(cx/W)*r.width+12))+"px";
+      tip.style.top=Math.max(2,Math.min(r.height-110,ev.clientY-r.top-58))+"px";
       const cr=div(d.conv,d.clicks)*100;
-      tip.innerHTML=`<b>${d.day}</b><br><span class="k">Кліки:</span> <b class="mono">${fmtInt(d.clicks)}</b>`+
-        `<br><span class="k">Конверсії:</span> <b class="mono" style="color:var(--s2)">${fmtInt(d.conv)}</b>`+
-        `<br><span class="k">CR:</span> <b class="mono">${d.clicks?fmtPct(cr):"—"}</b>`+
+      tip.innerHTML=`<b>${d.day}</b>${c?` <span class="k">проти ${c.day}</span>`:""}<br>`+
+        row("Кліки","var(--s1)",d.clicks,c?c.clicks:null)+`<br>`+
+        row("Конверсії","var(--s2)",d.conv,c?c.conv:null)+`<br>`+
+        `<span class="k">CR:</span> <b class="mono">${d.clicks?fmtPct(cr):"—"}</b>`+
         (d.rev>0?`<br><span class="k">Підтв. дохід:</span> <b class="mono" style="color:var(--good-ink)">${fmtMoney(d.rev)}</b>`:"");
     });
     hit.addEventListener("mouseleave",()=>{tip.style.opacity=0;cursor.style.opacity=0;d1.style.opacity=0;d2.style.opacity=0;});
@@ -1780,7 +1862,7 @@ function KT_boot(D){
     if(state.filter.q) computeFilter();
   })();
 
-  syncSeg(); syncFilterUI(); syncTeam(); syncMv(); syncTab(); syncNetFilt(); render();
+  syncSeg(); syncFilterUI(); syncTeam(); syncMv(); syncCmp(); syncTab(); syncNetFilt(); render();
 }
 </script>
 <script>
