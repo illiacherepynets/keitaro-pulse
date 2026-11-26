@@ -1873,11 +1873,12 @@ function KT_boot(D){
     blocked:  {t:"блокує",        c:"bad",  d:"на шляху стоїть захист, капча або бан"},
     http:     {t:"помилка",       c:"bad",  d:"сервер віддав помилку"},
     dead:     {t:"не відкрилась", c:"bad",  d:"не достукались до хоста"},
-    loop:     {t:"петля",         c:"warn", d:"редіректи ходять по колу"},
+    loop:     {t:"петля",         c:"warn", d:"редіректи ходять по колу — лінк зациклений"},
+    long:     {t:"задовгий",      c:"warn", d:"ланцюг не завершився за відведені кроки: або дуже довгий маршрут, або нескінченний"},
     proxy:    {t:"проксі",        c:"mute", d:"не вина лінка: не вийшло вийти з цієї країни"},
     skip:     {t:"пропущено",     c:"mute", d:"у назві кампанії не знайшлось гео"},
   };
-  const TDS_ORDER = ["empty","blocked","dead","http","mismatch","loop","lander","ok","proxy","skip"];
+  const TDS_ORDER = ["empty","blocked","dead","http","mismatch","loop","long","lander","ok","proxy","skip"];
   const TDSC = {ok:"var(--good)",bad:"var(--crit)",warn:"var(--warn)",mute:"var(--border-strong)"};
 
   let TDS=null, tdsState="idle", tdsFilt="bad", tdsQ="", tdsGeo="all";

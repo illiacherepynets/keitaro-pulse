@@ -35,7 +35,7 @@ import { parseCampaign } from "./campaign.mjs";
 const __dir = dirname(fileURLToPath(import.meta.url));
 const log = (...a) => console.log("•", ...a);
 
-const MAX_HOPS     = 10;      // довші ланцюги — це вже петля, а не маршрутизація
+const MAX_HOPS     = 15;      // ланцюг трекер → афка → бренд → регіон буває довгим
 const HOP_TIMEOUT  = 20_000;
 const MAX_BODY     = 48 * 1024;  // більше й не треба: шукаємо редірект і сліди блоку
 const CONCURRENCY  = 6;       // не душимо ні проксі, ні цільові сайти
@@ -428,7 +428,10 @@ async function checkLink(link, proxy, ua, offerHosts) {
   if (err && err.kind === "proxy") { verdict = "proxy"; note = err.message; }
   else if (err)                    { verdict = "dead";  note = err.message; }
   else if (loop)                   { verdict = "loop";  note = `редірект ходить по колу (крок ${chain.length})`; }
-  else if (tooLong)                { verdict = "loop";  note = `ланцюг не завершився за ${MAX_HOPS} кроків`; }
+  // Коло і «не встигли дійти» — різні діагнози: перше зламане, друге може
+  // виявитись просто довгим маршрутом. Злиті в один вердикт вони приховували,
+  // що саме сталось.
+  else if (tooLong)                { verdict = "long";  note = `ланцюг не завершився за ${MAX_HOPS} кроків`; }
   else if (last.blocked || last.status === 403 || last.status === 451) { verdict = "blocked"; note = last.title || `HTTP ${last.status}`; }
   else if (last.status >= 400)     { verdict = "http";  note = `HTTP ${last.status}`; }
   else if (last.status === 0)      { verdict = "dead";  note = last.note || "немає відповіді"; }
@@ -482,7 +485,7 @@ async function pool(items, n, fn) {
   return out;
 }
 
-const VERDICTS = ["ok", "lander", "mismatch", "empty", "blocked", "http", "dead", "loop", "proxy", "skip"];
+const VERDICTS = ["ok", "lander", "mismatch", "empty", "blocked", "http", "dead", "loop", "long", "proxy", "skip"];
 
 // Разовий зонд: що саме Keitaro знає про кампанії й домени. Потрібен, бо
 // вгадувати поля тут означало б будувати лінки, яких не існує. У публічний
@@ -649,6 +652,11 @@ async function main() {
   }
 
   const bad = links.length - stat.ok;
+  // Розподіл довжини ланцюга — єдиний спосіб зрозуміти з публічного логу,
+  // чи вистачає MAX_HOPS, не показуючи самих адрес.
+  const lens = chains.map((c) => c.length).sort((a, b) => a - b);
+  const p = (q) => lens[Math.min(lens.length - 1, Math.floor(lens.length * q))] || 0;
+  log(`Кроків у ланцюгу: медіана ${p(0.5)} · 90% ${p(0.9)} · максимум ${lens[lens.length - 1] || 0} (ліміт ${MAX_HOPS})`);
   log(`Готово за ${((Date.now() - t0) / 1000).toFixed(0)}s · ok ${stat.ok} · проблемних ${bad}`);
   log(VERDICTS.filter((v) => stat[v]).map((v) => `${v}: ${stat[v]}`).join(" · "));
   if (stat.proxy && stat.proxy === links.length) throw new Error("жоден лінк не пройшов через проксі — перевір KT_PROXY і баланс DataImpulse");
