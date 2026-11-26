@@ -791,7 +791,7 @@ function KT_boot(D){
             <div class="phead">
               <div><h2>Перевірка ТДС-лінків</h2><div class="psub" id="tdsSub"></div></div>
               <div class="tools">
-                <div class="seg alt" id="tdsFilt"><button data-f="bad" title="Те, що справді зламано: порожня сторінка, блок, помилка сервера, не той хост">⚠ Проблемні</button><button data-f="warn" title="Капча й петля: живий браузер їх зазвичай проходить, тож у проблемні вони не йдуть">Капчі</button><button data-f="ok">Все гуд</button><button data-f="all">Усі</button></div>
+                <div class="seg alt" id="tdsFilt"><button data-f="bad" title="Те, що справді зламано: порожня сторінка, блок, помилка сервера, не той хост">⚠ Проблемні</button><button data-f="warn" title="Капча, петля і сторінки, що ще вантажаться: живий браузер їх зазвичай проходить, тож у проблемні вони не йдуть">Капчі</button><button data-f="ok">Все гуд</button><button data-f="all">Усі</button></div>
                 <select class="pill" id="tdsTeam" title="Який інстанс Keitaro"></select>
                 <select class="pill" id="tdsGeo" title="Гео"></select>
                 <input class="search" id="tdsSearch" placeholder="кампанія, префікс, хост…">
@@ -1886,6 +1886,7 @@ function KT_boot(D){
     lander:   {t:"ленд",          c:"ok",   d:"сторінка на домені трекера — локальний ленд, далі юзер іде кліком"},
     mismatch: {t:"не туди",       c:"bad",  d:"вийшли на хост, якого немає серед оферів Keitaro"},
     empty:    {t:"порожньо",      c:"bad",  d:"трекер нічого не віддав: під це гео й девайс не підібрався жоден потік. Перевірка ходить без реферера й міток — якщо потік вимагає їх, у живому трафіку може бути все гаразд"},
+    loading:  {t:"вантажиться",   c:"warn", d:"дійшли за межі трекера, сторінка віддала 200 і ще малюється скриптом. Юзер її побачить, а перевірка JS не виконує — тому не «працює» і не поломка"},
     challenge:{t:"капча",         c:"warn", d:"сторінка просить довести, що ти людина — живий юзер зазвичай проходить, бот ні"},
     blocked:  {t:"блокує",        c:"bad",  d:"глухий блок: далі не пустять ні за яких умов"},
     http:     {t:"помилка",       c:"bad",  d:"сервер віддав помилку"},
@@ -1908,7 +1909,7 @@ function KT_boot(D){
 
   // Порядок задає і сортування таблиці, і порядок у легенді: спершу зламане,
   // далі капча з петлею, тоді робоче, і наприкінці те, що не перевірялось.
-  const TDS_ORDER = ["empty","blocked","dead","http","mismatch","long","challenge","loop","lander","ok","proxy","skip"];
+  const TDS_ORDER = ["empty","blocked","dead","http","mismatch","long","challenge","loop","loading","lander","ok","proxy","skip"];
   const TDSC = {ok:"var(--good)",bad:"var(--crit)",warn:"var(--warn)",mute:"var(--border-strong)"};
 
 
@@ -2080,7 +2081,7 @@ function KT_boot(D){
 
     // Смуга-розподіл: одразу видно співвідношення, не читаючи таблицю.
     const present=TDS_ORDER.filter(v=>TDS.stat[v]>0);
-    const grp=[["bad","проблемні"],["warn","капча чи петля"],["ok","все гуд"],["mute","не перевірені"]]
+    const grp=[["bad","проблемні"],["warn","капча, петля, вантажиться"],["ok","все гуд"],["mute","не перевірені"]]
       .map(([c,t])=>[c,t,present.filter(v=>TDSV[v].c===c).reduce((n,v)=>n+TDS.stat[v],0)])
       .filter(g=>g[2]>0);
     document.getElementById("tdsDist").innerHTML=

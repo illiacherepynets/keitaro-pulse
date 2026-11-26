@@ -404,18 +404,30 @@ function abs(href, base) { try { return new URL(href, base).toString(); } catch 
 // /cdn-cgi/challenge-platform/ і в цілком здорові сторінки, для скорингу
 // ботів. Перша версія через це перефарбувала 29 робочих лінків у «капчу».
 // Тому: або це написано в <title>, або сервер відповів 403/503.
-const CHALLENGE_TITLE = /just a moment|checking your browser|attention required|один момент/i;
+// «Attention Required» — це вже не капча, а відмова Cloudflare (1020),
+// тому воно живе лише серед ознак блоку, інакше глухий блок їхав би в жовте.
+const CHALLENGE_TITLE = /just a moment|checking your browser|один момент/i;
 const CHALLENGE_BODY  = /cf-browser-verification|challenge-platform|enable javascript and cookies to continue/i;
 const CHALLENGE_CODE  = new Set([403, 503]);
-// Глухий блок: далі не пустять ні за яких умов.
-const BLOCK_SIGN = [
-  /attention required/i, /access denied/i, /request blocked/i, /403 forbidden/i,
-  /sorry, you have been blocked/i, /not available in your country/i,
-  /доступ (?:заборонено|ограничен)/i,
-];
+// Глухий блок. Шукати ці слова по всьому тілу не можна з тієї ж причини, що
+// й ознаки капчі: у скриптах і словниках живої сторінки трапляється будь-що,
+// і сторінка з заголовком «Loading...» через це читалась як блок.
+const BLOCK_TITLE = /access denied|attention required|blocked|forbidden|not available in your country|заблоков|доступ (?:заборонено|ограничен)/i;
+const BLOCK_BODY  = /sorry, you have been blocked|request blocked|not available in your country/i;
+
+// Сторінка, яка ще не намалювалась: віддала 200 і вантажиться скриптом.
+// Юзер її, найімовірніше, побачить, а перевірка JS не виконує — тож це не
+// «працює» і не поломка, а окремий стан.
+const LOADING_TITLE = /^\s*(loading|завантаж|загруз|please wait|redirecting|перенаправ)/i;
+
 const looksChallenge = (body, status, title) =>
   CHALLENGE_TITLE.test(title || "") || (CHALLENGE_CODE.has(status) && CHALLENGE_BODY.test(body));
-const looksBlocked = (body) => BLOCK_SIGN.some((re) => re.test(body));
+const looksBlocked = (body, status, title) =>
+  status === 403 || status === 451 || BLOCK_TITLE.test(title || "") ||
+  (status >= 400 && BLOCK_BODY.test(body));
+const looksLoading = (body, status, title) =>
+  status === 200 && (LOADING_TITLE.test(title || "") ||
+    (!title && body.length < 2048 && /loading|spinner|preloader/i.test(body)));
 
 const hostOf = (u) => { try { return new URL(u).hostname.replace(/^www\./i, "").toLowerCase(); } catch { return ""; } };
 const root2  = (h) => h.split(".").slice(-2).join(".");
@@ -441,8 +453,9 @@ async function checkLink(link, proxy, ua, offerHosts) {
     }
     const ttl = titleOf(r.body);
     chain.push({ url: cur, status: r.status, via: "", ms: r.ms, title: ttl,
-                 len: r.body.length, blocked: looksBlocked(r.body),
-                 challenge: looksChallenge(r.body, r.status, ttl) });
+                 len: r.body.length, blocked: looksBlocked(r.body, r.status, ttl),
+                 challenge: looksChallenge(r.body, r.status, ttl),
+                 loading: looksLoading(r.body, r.status, ttl) });
     const nx = nextUrl(r, cur);
     if (!nx || !nx.url) break;
     chain[chain.length - 1].via = nx.via;
@@ -475,7 +488,7 @@ async function checkLink(link, proxy, ua, offerHosts) {
   // Челендж і глухий блок — різні речі: перший живий юзер зазвичай проходить,
   // другий ні. Злиті в одне, вони однаково фарбувались у червоне.
   else if (last.challenge)         { verdict = "challenge"; note = last.title || "перевірка «чи ти людина»"; }
-  else if (last.blocked || last.status === 403 || last.status === 451) { verdict = "blocked"; note = last.title || `HTTP ${last.status}`; }
+  else if (last.blocked)           { verdict = "blocked"; note = last.title || `HTTP ${last.status}`; }
   else if (last.status >= 400)     { verdict = "http";  note = `HTTP ${last.status}`; }
   else if (last.status === 0)      { verdict = "dead";  note = last.note || "немає відповіді"; }
   // Лишились на домені трекера. Порожня відповідь — це «під це гео й девайс не
@@ -483,6 +496,10 @@ async function checkLink(link, proxy, ua, offerHosts) {
   // з якого юзер іде далі кліком, а клікати перевірка не вміє.
   else if (!left && (last.len || 0) < 500) { verdict = "empty";  note = "трекер віддав порожню сторінку — під це гео/девайс не підібрався потік"; }
   else if (!left)                  { verdict = "lander"; note = last.title ? `ленд на домені трекера: ${last.title}` : "ленд на домені трекера — далі потрібен клік"; }
+  // Дійшли за межі трекера, сторінка віддалась, але ще малюється скриптом.
+  // Побачити фінал без справжнього браузера неможливо — тож окремий стан,
+  // а не «працює» і не поломка.
+  else if (last.loading)           { verdict = "loading"; note = `сторінка віддала 200 і ще вантажиться${last.title ? ` («${last.title}»)` : ""} — далі працює скрипт, якого перевірка не виконує`; }
   else if (known && !touchedOffer) { verdict = "mismatch"; note = `вийшли на ${finalHost} — цього хоста немає серед оферів Keitaro`; }
   else                             { verdict = "ok"; }
 
@@ -534,13 +551,13 @@ async function pool(items, n, fn) {
   return out;
 }
 
-const VERDICTS = ["ok", "lander", "mismatch", "empty", "challenge", "blocked", "http", "dead", "loop", "long", "proxy", "skip"];
+const VERDICTS = ["ok", "lander", "loading", "mismatch", "empty", "challenge", "blocked", "http", "dead", "loop", "long", "proxy", "skip"];
 
 // Три стани для історії: добре / під питанням / зламано. Детальніший вердикт
 // лишається в рядку, а смужка історії має читатись з одного погляду.
 // Три стани для історії. Капча й петля — не поломка: живий браузер їх
 // зазвичай проходить, тому вони окремим кольором, а не червоним.
-const BUCKET = { ok: "o", lander: "o", challenge: "w", loop: "w",
+const BUCKET = { ok: "o", lander: "o", challenge: "w", loop: "w", loading: "w",
                  mismatch: "b", long: "b", empty: "b", blocked: "b", http: "b", dead: "b" };
 const HIST_MAX = 12;
 
