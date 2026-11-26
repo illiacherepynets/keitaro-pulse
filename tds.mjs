@@ -419,27 +419,36 @@ async function probeKeitaro() {
     const j = await r.json();
     return Array.isArray(j) ? j : (j.rows || j);
   };
-  // Потоки кампанії: саме в них має лежати розкладка по slot, бо кожен слот —
-  // це окремий сайт призначення. Без цього лінк «голий» і трекер справедливо
-  // не знає, куди вести.
+  // Потоки саме тих кампаній, що мають трафік: перші за списком — інше
+  // покоління (один потік без фільтрів), і по них не видно, звідки slot.
   const camps0 = await get("/campaigns");
-  const sample = (Array.isArray(camps0) ? camps0 : []).slice(0, 3);
-  for (const c of sample) {
-    for (const path of [`/campaigns/${c.id}/streams`, `/streams?campaign_id=${c.id}`]) {
-      const st = await get(path);
-      if (st.err) { log(`${path} → HTTP ${st.err}`); continue; }
-      const arr = Array.isArray(st) ? st : [st];
-      log(`${path.replace(/\d+/g, "N")} → ${arr.length} потоків`);
-      if (!arr.length) break;
-      log(`  поля: ${Object.keys(arr[0]).join(", ")}`);
-      arr.slice(0, 12).forEach((x, i) => {
-        const f = JSON.stringify(x.filters || []);
-        // показуємо лише структуру фільтрів: імена й числа, без значень-доменів
-        const masked = f.replace(/"(https?:\/\/[^"]*)"/g, '"URL"').slice(0, 300);
-        log(`  #${i + 1} type=${x.type} action=${x.action_type} pos=${x.position} weight=${x.weight} state=${x.state} filters=${masked}`);
-      });
-      break;
-    }
+  const all0 = Array.isArray(camps0) ? camps0 : [];
+  let top = all0.slice(0, 5);
+  try {
+    const rep = await fetch(API + "/report/build", {
+      method: "POST", headers,
+      body: JSON.stringify({ range: { from: dayAgo(7) + " 00:00:00", to: dayAgo(1) + " 23:59:59", timezone: TZ },
+        grouping: ["campaign_id"], metrics: ["clicks"], filters: [], sort: [], summary: false, limit: 100000, offset: 0 }),
+      signal: AbortSignal.timeout(120_000),
+    }).then((r) => r.json());
+    const cl = new Map((rep.rows || []).map((r) => [String(r.campaign_id), Number(r.clicks) || 0]));
+    top = all0.filter((c) => (cl.get(String(c.id)) || 0) > 0)
+              .sort((a, b) => (cl.get(String(b.id)) || 0) - (cl.get(String(a.id)) || 0)).slice(0, 5);
+    log(`кампаній із трафіком: ${all0.filter((c) => (cl.get(String(c.id)) || 0) > 0).length}`);
+  } catch (e) { log(`звіт не віддався: ${hide(e.message)}`); }
+
+  for (const c of top) {
+    const st = await get(`/campaigns/${c.id}/streams`);
+    if (st.err) { log(`streams → HTTP ${st.err}`); continue; }
+    const arr = Array.isArray(st) ? st : [st];
+    // Аліас показуємо формою, не текстом: сам по собі він частина бойового лінка.
+    const shape = String(c.alias || "").replace(/[a-z]/gi, "a").replace(/\d/g, "9");
+    log(`кампанія alias~${shape} (${String(c.alias||"").length} симв.) · параметри:${JSON.stringify(c.parameters||[]).slice(0,160)} · потоків ${arr.length}`);
+    arr.slice(0, 15).forEach((x, i) => {
+      const f = JSON.stringify(x.filters || []).replace(/"https?:\/\/[^"]*"/g, '"URL"');
+      log(`   #${i + 1} ${x.type}/${x.action_type} pos=${x.position} w=${x.weight} ${x.state}` +
+          ` ленди=${(x.landings || []).length} офери=${(x.offers || []).length} фільтри=${f.slice(0, 260)}`);
+    });
   }
 
   for (const path of ["/campaigns", "/domains", "/offers"]) {
@@ -458,10 +467,6 @@ async function probeKeitaro() {
       const withDomain = arr.filter((c) => c.domain_id).length;
       const states = [...new Set(arr.map((c) => c.state))].join("/");
       log(`  з alias: ${withAlias} · з domain_id: ${withDomain} · стани: ${states}`);
-      log(`  приклад лінка, як його будує перевірка: ${arr.slice(0,3).map((c)=>{
-        const u = String(c.domain||"").replace(/\/+$/,"") + "/" + c.alias;
-        try { const x = new URL(u); return "https://***" + x.pathname; } catch { return "?"; }
-      }).join(" , ")}`);
       const linkish = Object.keys(arr[0]).filter((k) => /link|url|domain|alias/i.test(k));
       log(`  схоже на посилання: ${linkish.join(", ") || "нічого"}`);
       for (const k of linkish) {
