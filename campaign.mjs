@@ -12,3 +12,11 @@ export function parseCampaign(name) {
   const prefix = tokens[0] && /^[A-Z0-9]{2,}$/.test(tokens[0]) ? tokens[0] : "—";
   return { prefix, geo: geo || "—" };
 }
+
+// Справжні назви команд. У секреті KT_TEAMS вони знеособлені («Команда 1»…),
+// щоб назви не світились у публічних логах Actions, а в дашборді мають бути
+// людські — і однакові на всіх вкладках. Порядок відповідає порядку в секреті.
+export const TEAM_NAMES = ["Folders", "Drop domains", "Monobrands", "Asia", "Italy"];
+
+export const applyTeamNames = (teams) =>
+  (teams || []).map((t, i) => (TEAM_NAMES[i] ? { ...t, name: TEAM_NAMES[i] } : t));

@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join, isAbsolute, resolve } from "node:path";
 import { encryptData } from "./crypto.mjs";
 // Розбір назви кампанії спільний із tds.mjs: гео звідти задає країну перевірки.
-import { parseCampaign } from "./campaign.mjs";
+import { parseCampaign, TEAM_NAMES } from "./campaign.mjs";
 
 // ── КОНФІГ (НЕ секретне) ─────────────────────────────────────────────────────
 const TZ          = "Europe/Kyiv";  // має збігатись з таймзоною звіту в Keitaro
@@ -33,7 +33,6 @@ const INCLUDE_TODAY = false;        // false = лише завершені дн�
 // Тримаємо їх тут, а не в секреті: перейменувати можна одним комітом, не
 // перевводячи URL та API-ключі, де одна помилка ламає всю збірку.
 // Порожній рядок або відсутній елемент → лишається назва з KT_TEAMS.
-const TEAM_NAMES = ["Folders", "Drop domains", "Monobrands", "Asia", "Italy"];
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 

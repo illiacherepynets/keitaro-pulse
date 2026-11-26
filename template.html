@@ -795,6 +795,8 @@ function KT_boot(D){
                 <select class="pill" id="tdsTeam" title="Який інстанс Keitaro"></select>
                 <select class="pill" id="tdsGeo" title="Гео"></select>
                 <input class="search" id="tdsSearch" placeholder="кампанія, префікс, хост…">
+                <button class="mbtn" id="tdsCsv" type="button" title="Вивантажити те, що зараз у таблиці, у CSV">CSV</button>
+                <button class="mbtn" id="tdsCopy" type="button" title="Скопіювати текстом — щоб одразу скинути афіліату">Скопіювати</button>
                 <button class="mbtn primary" id="tdsRun" type="button">Перевірити</button>
               </div>
             </div>
@@ -1896,6 +1898,82 @@ function KT_boot(D){
   const TDS_ORDER = ["empty","blocked","dead","http","mismatch","challenge","loop","long","lander","ok","proxy","skip"];
   const TDSC = {ok:"var(--good)",bad:"var(--crit)",warn:"var(--warn)",mute:"var(--border-strong)"};
 
+
+  // ── Вивантаження для афіліата ──────────────────────────────────────────────
+  // Головне тут — щоб із файлу було зрозуміло БЕЗ пояснень: який Keitaro,
+  // яка кампанія, який слот і що саме зламалось. Інакше афіліат отримає
+  // список адрес і не знатиме, куди дивитись.
+  let tdsView=[], tdsText="";
+
+  const VNAME=(v)=>(TDSV[v]||TDSV.skip).t;
+  function rowFields(r,i){
+    const ch=(TDS.chains||[])[i]||[];
+    const last=ch[ch.length-1];
+    return {
+      keitaro:(TDS.tabs||[])[r[0]]||"",
+      camp:r[2]||"", id:r[13]||"", slot:r[14]||"",
+      geo:(r[5]||r[4]||"").toUpperCase(),
+      verdict:VNAME(r[6]), note:r[11]||"",
+      host:r[7]||"", title:last?last[4]||"":"",
+      hops:r[9], sec:r[10]?(r[10]/1000).toFixed(1):"",
+      clicks:r[1]||0, url:r[12]||"",
+      chain:ch.map(c=>`${c[1]||"—"} ${c[0]}`).join(" → "),
+    };
+  }
+
+  function tdsCsv(){
+    const head=["Keitaro","Кампанія","ID кампанії","Слот","Гео","Вердикт","Що саме",
+      "Де опинились","Сторінка","Кроків","Час, с","Кліків за 7 дн","Посилання","Ланцюг редіректів"];
+    const esc1=(v)=>{ const s=String(v??""); return /[";\n]/.test(s)?`"${s.replace(/"/g,'""')}"`:s; };
+    const lines=[head.join(";")];
+    for(const {r,i} of tdsView){ const f=rowFields(r,i);
+      lines.push([f.keitaro,f.camp,f.id,f.slot,f.geo,f.verdict,f.note,f.host,f.title,
+        f.hops,f.sec,f.clicks,f.url,f.chain].map(esc1).join(";")); }
+    // BOM — щоб Excel не показував кирилицю кракозябрами
+    return "﻿"+lines.join("\r\n");
+  }
+
+  function tdsPlain(){
+    const when=TDS.generated||"";
+    const dev=TDS.ua==="desktop"?"десктопний браузер":"мобільний браузер";
+    const out=[`Перевірка ТДС-лінків · ${when} · ${dev}, з резидентської IP країни кампанії`,
+      `У вибірці: ${tdsView.length} ${plural(tdsView.length,["лінк","лінки","лінків"])}`,""];
+    // Для людини групуємо за Keitaro й кампанією, а не за тяжкістю: інакше
+    // заголовок команди повторювався б через рядок і групування нічого не дає.
+    const sorted=[...tdsView].sort((a,b)=>{
+      const fa=rowFields(a.r,a.i), fb=rowFields(b.r,b.i);
+      return fa.keitaro.localeCompare(fb.keitaro,"uk") || fa.camp.localeCompare(fb.camp,"uk")
+          || (Number(fa.slot)||0)-(Number(fb.slot)||0);
+    });
+    let cur="";
+    for(const {r,i} of sorted){ const f=rowFields(r,i);
+      if(f.keitaro!==cur){ cur=f.keitaro; out.push(`[Keitaro] ${cur}`); }
+      out.push(`— ${f.camp}${f.slot?` · ${TDS.slotParam||"slot"}=${f.slot}`:""} · ${f.geo} · ${f.verdict.toUpperCase()}`);
+      if(f.note) out.push(`  що саме: ${f.note}`);
+      out.push(`  лінк: ${f.url}`);
+      if(f.chain) out.push(`  ланцюг: ${f.chain}`);
+      out.push("");
+    }
+    return out.join("\n");
+  }
+
+  function download(name,text,mime){
+    const b=new Blob([text],{type:mime}); const u=URL.createObjectURL(b);
+    const a=document.createElement("a"); a.href=u; a.download=name; a.click();
+    setTimeout(()=>URL.revokeObjectURL(u),2000);
+  }
+  function stamp(){ const d=new Date(TDS.checkedAt||Date.now());
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; }
+
+  async function copyText(text,btn){
+    const okMsg="Скопійовано ✓", was=btn?btn.textContent:"";
+    try{ await navigator.clipboard.writeText(text); if(btn){btn.textContent=okMsg; setTimeout(()=>btn.textContent=was,1600);} return; }
+    catch(e){}
+    // Буфер може бути недоступний (не той контекст, відмова) — тоді показуємо
+    // текст, щоб людина скопіювала руками, а не лишалась ні з чим.
+    modalKind="text"; tdsText=text; openModal();
+  }
+
   // Смужка минулих перевірок цього самого лінка. Один квадратик — один прогін,
   // найсвіжіший праворуч. Порожні — прогони, у які лінк не потрапив (інше гео
   // або ліміт), тому вони сірі, а не зелені.
@@ -2041,6 +2119,7 @@ function KT_boot(D){
       ? `Keitaro: ${teams.join(", ")||"—"}`
       : /^camp:/i.test(TDS.scope) ? `одна кампанія · Keitaro: ${teams.join(", ")||"—"}`
       : `обране: ${TDS.scope}`;
+    tdsView=view;
     document.getElementById("tdsSub").textContent = who
       + (TDS.offerHosts?` · довідник оферів: ${fmtInt(TDS.offerHosts)} ${plural(TDS.offerHosts,["хост","хости","хостів"])}`:"")
       + (slotRows?` · зі слотом: ${fmtInt(slotRows)}`:"");
@@ -2085,6 +2164,7 @@ function KT_boot(D){
           `</ul>`+
           `<div class="mrow" style="margin-top:10px">`+
         `<button class="mbtn" type="button" data-camp="${esc(r[13])}" data-cname="${esc(r[2]||"")}">↻ Перевірити цю кампанію</button>`+
+        `<button class="mbtn" type="button" data-copy="${i}">Скопіювати цей лінк</button>`+
         `<span class="mnote">усі її слоти, з гео ${esc((r[5]||r[4]||"").toUpperCase())}</span></div>`+
       (r[8]?`<div class="hint" style="margin:0">Домен трекера — <span class="mono">${esc(r[8])}</span>. Робочий лінк має вивести за його межі, на хост із довідника оферів Keitaro.</div>`:"")+
           `</td></tr>`);
@@ -2092,6 +2172,14 @@ function KT_boot(D){
     }
     html.push("</tbody>");
     document.getElementById("tdsTbl").innerHTML=html.join("");
+    document.querySelectorAll("#tdsTbl [data-copy]").forEach(b=>b.onclick=(e)=>{
+      e.stopPropagation();
+      const i=+b.dataset.copy, r=rows[i], f=rowFields(r,i);
+      copyText([`Keitaro: ${f.keitaro}`,`Кампанія: ${f.camp} (id ${f.id})`,
+        f.slot?`Слот: ${TDS.slotParam||"slot"}=${f.slot}`:"",`Гео: ${f.geo}`,
+        `Стан: ${f.verdict}${f.note?" — "+f.note:""}`,`Лінк: ${f.url}`,
+        f.chain?`Ланцюг: ${f.chain}`:""].filter(Boolean).join("\n"), b);
+    });
     document.querySelectorAll("#tdsTbl [data-camp]").forEach(b=>b.onclick=(e)=>{
       e.stopPropagation();
       tdsPreset={scope:"camp:"+b.dataset.camp, label:"Лише кампанія: "+b.dataset.cname};
@@ -2177,9 +2265,10 @@ function KT_boot(D){
   let polling=false;
   // Одне вікно на два сценарії: перезбір даних і запуск перевірки ТДС.
   let modalKind="build";
+  const MODAL_TITLE={tds:"Перевірити ТДС-лінки", text:"Скопіюй вручну", build:"Оновити дані"};
   const openModal=()=>{ modal.hidden=false;
-    document.getElementById("mTitle").textContent = modalKind==="tds"?"Перевірити ТДС-лінки":"Оновити дані";
-    (modalKind==="tds"?drawTdsModal:drawModal)();
+    document.getElementById("mTitle").textContent = MODAL_TITLE[modalKind]||MODAL_TITLE.build;
+    (modalKind==="tds"?drawTdsModal:modalKind==="text"?drawTextModal:drawModal)();
     setTimeout(()=>{const i=mBody.querySelector("input,button,a,select");if(i)i.focus();},30); };
   const closeModal=()=>{ if(!polling){ modal.hidden=true; tdsPreset=null; } };
   document.getElementById("mClose").onclick=closeModal;
@@ -2278,9 +2367,22 @@ function KT_boot(D){
     if(tokGet()){ openModal(); startBuild(); } else openModal();
   };
   document.getElementById("tdsRun").onclick=()=>{ tdsPreset=null; modalKind="tds"; openModal(); };
+  document.getElementById("tdsCsv").onclick=()=>{
+    if(!tdsView.length) return;
+    download(`tds-${(TDS.scope||"all").replace(/[^\w-]+/g,"_")}-${stamp()}.csv`, tdsCsv(), "text/csv;charset=utf-8");
+  };
+  document.getElementById("tdsCopy").onclick=(e)=>{ if(tdsView.length) copyText(tdsPlain(), e.currentTarget); };
 
   const tdsWfUrl=()=>{ const r=repoInfo();
     return r?`https://github.com/${r.owner}/${r.repo}/actions/workflows/tds.yml`:"https://github.com"; };
+
+  // Буфер обміну недоступний (не той контекст або відмова) — показуємо текст,
+  // виділений і готовий до Ctrl+C, щоб людина не лишилась ні з чим.
+  function drawTextModal(){
+    mBody.innerHTML=`<p class="mnote">Браузер не дав доступ до буфера. Текст виділено — тисни Ctrl+C.</p>`+
+      `<textarea class="minput" id="mText" style="width:100%;min-height:260px;font-family:var(--mono);font-size:12px" spellcheck="false"></textarea>`;
+    const ta=document.getElementById("mText"); ta.value=tdsText; ta.focus(); ta.select();
+  }
 
   function drawTdsModal(){
     const has=!!tokGet();

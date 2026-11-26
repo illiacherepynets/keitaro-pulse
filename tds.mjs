@@ -30,7 +30,7 @@ import { writeFile, mkdir, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { encryptData, decryptData } from "./crypto.mjs";
-import { parseCampaign } from "./campaign.mjs";
+import { parseCampaign, applyTeamNames } from "./campaign.mjs";
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const log = (...a) => console.log("•", ...a);
@@ -155,7 +155,9 @@ async function loadLinks(scope, limit) {
   const raw = process.env.KT_TEAMS;
   if (!raw) throw new Error("немає секрету KT_TEAMS — нема звідки брати кампанії");
   const cfg = JSON.parse(raw);
-  const teams = (Array.isArray(cfg) ? cfg : cfg.teams) || [];
+  // Назви з секрету знеособлені — підставляємо ті самі людські, що й у збірці,
+  // інакше на вкладці ТДС було б «Команда 3», а на «Огляді» — «Monobrands».
+  const teams = applyTeamNames((Array.isArray(cfg) ? cfg : cfg.teams) || []);
   const sp = scopeParts(scope);
   const links = [], offerHosts = new Set();
 
