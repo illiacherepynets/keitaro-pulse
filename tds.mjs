@@ -279,13 +279,17 @@ function httpOverSocket(sock, preData, { host, path, headers }) {
       if (i < 0) return fail(new Error("порожня відповідь"));
       const head = buf.subarray(0, i).toString("latin1");
       const status = Number((head.match(/^HTTP\/\d\.\d (\d{3})/) || [])[1] || 0);
-      const h = {};
+      const h = {}, cookies = [];
       head.split("\r\n").slice(1).forEach((line) => {
-        const j = line.indexOf(":"); if (j > 0) h[line.slice(0, j).trim().toLowerCase()] = line.slice(j + 1).trim();
+        const j = line.indexOf(":"); if (j <= 0) return;
+        const k = line.slice(0, j).trim().toLowerCase(), v = line.slice(j + 1).trim();
+        // Set-Cookie приходить кількома рядками — звичайний обʼєкт лишив би останній.
+        if (k === "set-cookie") cookies.push(v); else h[k] = v;
       });
+      h["set-cookie"] = cookies;
       let body = buf.subarray(i + 4);
       if (/chunked/i.test(h["transfer-encoding"] || "")) body = dechunk(body);
-      done({ status, headers: h, body: body.subarray(0, MAX_BODY).toString("utf8") });
+      done({ status, headers: h, cookies, body: body.subarray(0, MAX_BODY).toString("utf8") });
     }
 
     const lines = [`GET ${path} HTTP/1.1`, `Host: ${host}`];
@@ -294,7 +298,27 @@ function httpOverSocket(sock, preData, { host, path, headers }) {
   });
 }
 
-async function oneHop(urlStr, cc, proxy, sess, ua, lang) {
+// Куки на весь ланцюг. Без них ламається поширений у трекерах прийом
+// «постав куку і зредіректь на себе»: клієнт без кук крутиться по колу вічно,
+// і перевірка чесно, але хибно рапортує петлю.
+function cookieHeader(jar, host) {
+  const m = jar.get(root2(host));
+  if (!m || !m.size) return "";
+  return [...m].map(([k, v]) => `${k}=${v}`).join("; ");
+}
+function rememberCookies(jar, host, list) {
+  if (!list || !list.length) return;
+  const key = root2(host);
+  if (!jar.has(key)) jar.set(key, new Map());
+  const m = jar.get(key);
+  for (const raw of list) {
+    const pair = String(raw).split(";")[0];
+    const i = pair.indexOf("=");
+    if (i > 0) m.set(pair.slice(0, i).trim(), pair.slice(i + 1).trim());
+  }
+}
+
+async function oneHop(urlStr, cc, proxy, sess, ua, lang, jar) {
   const u = new URL(urlStr);
   const https = u.protocol === "https:";
   const port = u.port ? Number(u.port) : (https ? 443 : 80);
@@ -319,8 +343,10 @@ async function oneHop(urlStr, cc, proxy, sess, ua, lang) {
       "Accept-Encoding": "identity",   // без gzip — інакше довелось би розпаковувати заради одного рядка
       "Upgrade-Insecure-Requests": "1",
       "Connection": "close",
+      ...(jar && cookieHeader(jar, u.hostname) ? { Cookie: cookieHeader(jar, u.hostname) } : {}),
     },
   });
+  if (jar) rememberCookies(jar, u.hostname, r.cookies);
   return { ...r, ms: Date.now() - t0 };
 }
 
@@ -363,13 +389,14 @@ async function checkLink(link, proxy, ua, offerHosts) {
   if (!cc) return { verdict: "skip", note: `невідоме гео «${link.geoRaw || "—"}»`, chain: [] };
   const sess = Math.floor(Math.random() * 1e9);
   const lang = LANG[cc.toUpperCase()] || "en-US,en;q=0.9";
-  const chain = [];
+  const chain = [], jar = new Map();
   let cur = link.url, loop = false, tooLong = false, err = null;
+  const seen = new Set();
 
   for (let hop = 0; hop < MAX_HOPS; hop++) {
     let r;
     try {
-      r = await oneHop(cur, cc, proxy, sess, ua, lang);
+      r = await oneHop(cur, cc, proxy, sess, ua, lang, jar);
     } catch (e) {
       err = e; chain.push({ url: cur, status: 0, via: "—", ms: 0, note: e.message });
       break;
@@ -379,7 +406,10 @@ async function checkLink(link, proxy, ua, offerHosts) {
     const nx = nextUrl(r, cur);
     if (!nx || !nx.url) break;
     chain[chain.length - 1].via = nx.via;
-    if (chain.some((c) => c.url === nx.url)) { loop = true; break; }
+    // Та сама адреса з новою кукою — це не коло, а другий крок логіки трекера.
+    const mark = nx.url + "|" + cookieHeader(jar, hostOf(nx.url));
+    if (seen.has(mark)) { loop = true; break; }
+    seen.add(mark);
     cur = nx.url;
     if (hop === MAX_HOPS - 1) tooLong = true;
   }
