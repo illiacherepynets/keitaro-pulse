@@ -342,6 +342,13 @@
   .chip.slot{background:color-mix(in srgb,var(--s4) 12%,#fff);color:var(--s4)}
   .chip.kt{background:color-mix(in srgb,var(--s2) 12%,#fff);color:var(--s2)}
   /* ── Фільтри: кнопка відкриває список із чекбоксами, як в Jira ─────────── */
+  /* Заголовки-сортувальники */
+  th.sortable{cursor:pointer;user-select:none;white-space:nowrap}
+  th.sortable:hover{color:var(--fg)}
+  th.sortable .ar{opacity:0;font-size:9px;margin-left:3px}
+  th.sortable:hover .ar{opacity:.45}
+  th.sortable[aria-sort] .ar{opacity:1;color:var(--s1)}
+  th.sortable[aria-sort]{color:var(--info-ink)}
   .fwrap{position:relative;display:inline-flex}
   .fbtn{display:inline-flex;align-items:center;gap:6px;background:var(--panel);
     border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:6px 10px;
@@ -1230,7 +1237,7 @@ function KT_boot(D){
         <td class="mono">${r.conv>0?fmtPct(r.cr):'<span class="zero">—</span>'}</td>
         <td class="mono ${r.sales?'':'zero'}">${r.sales||"0"}</td>
         <td class="mono ${r.rev>0?'':'zero'}">${r.rev>0?fmtMoney(r.rev):"—"}</td>
-        <td class="mono ${r.confRev>0?'up':'zero'}">${r.confRev>0?fmtMoney(r.confRev):"—"}</td></tr>`).join(""):`<tr class="nolink"><td colspan="8" class="emptycell">Нічого не знайдено.</td></tr>`}</tbody>`;
+        <td class="mono ${r.confRev>0?'up':'zero'}">${r.confRev>0?fmtMoney(r.confRev):"—"}</td></tr>`).join(""):`<tr class="nolink"><td colspan="9" class="emptycell">Нічого не знайдено.</td></tr>`}</tbody>`;
     const tbl=document.getElementById("siteTbl");
     tbl.querySelectorAll("th").forEach(th=>th.onclick=()=>{const i=+th.dataset.i; if(sortState.site.key===i)sortState.site.asc=!sortState.site.asc;else{sortState.site.key=i;sortState.site.asc=false;}renderSites();});
     tbl.querySelectorAll("tbody tr[data-name]").forEach(tr=>tr.onclick=()=>setFilter("site",tr.dataset.name));
@@ -2043,6 +2050,19 @@ function KT_boot(D){
   // так не треба тримати окреме значення «усі» й звіряти його всюди.
   const BUCKETS=[["bad","Проблемні"],["warn","Капчі"],["ok","Все гуд"],["mute","Не перевірені"]];
   const tdsSel={status:new Set(TDS_ORDER.filter(v=>(TDSV[v]||{}).c==="bad")), team:new Set(), geo:new Set()};
+  // Що можна сортувати. txt=1 — порівнюємо як текст, інакше як число.
+  // «Вердикт» сортується за тяжкістю (порядок TDS_ORDER), а не за абеткою:
+  // за абеткою «блокує» опинилось би між «вантажиться» і «капча».
+  const SORTS={
+    camp:   {get:r=>r[2]||"", txt:1},
+    geo:    {get:r=>(r[5]||r[4]||""), txt:1},
+    verdict:{get:r=>TDS_ORDER.indexOf(r[6])},
+    host:   {get:r=>r[7]||"", txt:1},
+    clicks: {get:r=>r[1]||0},
+    hops:   {get:r=>r[9]||0},
+    ms:     {get:r=>r[10]||0},
+  };
+  let tdsSort={k:"verdict",d:1};
   let TDS=null, tdsState="idle", tdsQ="";
   // Що саме перепровірити, коли тиснуть «Перевірити цю кампанію»: {scope, label}
   let tdsPreset=null;
@@ -2255,8 +2275,14 @@ function KT_boot(D){
       if(q&&!((r[2]+" "+r[3]+" "+r[7]+" "+r[12]+" "+(r[14]||"")).toLowerCase().includes(q))) return false;
       return true;
     });
-    // найболючіше зверху: спершу зламане, тоді «не туди», тоді решта
-    view.sort((a,b)=>TDS_ORDER.indexOf(a.r[6])-TDS_ORDER.indexOf(b.r[6])||String(a.r[2]).localeCompare(b.r[2],"uk"));
+    // Типово — найболючіше зверху; далі як накаже користувач, клікнувши шапку.
+    const S=SORTS[tdsSort.k]||SORTS.verdict;
+    view.sort((a,b)=>{
+      const va=S.get(a.r), vb=S.get(b.r);
+      let c=S.txt?String(va).localeCompare(String(vb),"uk"):(va-vb);
+      if(!c) c=String(a.r[2]||"").localeCompare(String(b.r[2]||""),"uk");  // стабільний другий ключ
+      return c*tdsSort.d;
+    });
 
     // Перше питання до такої таблиці — «а це взагалі яка Keitaro?». Тому
     // інстанси названі поіменно, а не пораховані.
@@ -2269,9 +2295,16 @@ function KT_boot(D){
       + (TDS.offerHosts?` · довідник оферів: ${fmtInt(TDS.offerHosts)} ${plural(TDS.offerHosts,["хост","хости","хостів"])}`:"")
       + (slotRows?` · зі слотом: ${fmtInt(slotRows)}`:"");
 
-    const html=[`<thead><tr><th>Кампанія</th><th>Гео</th><th>Вердикт</th><th>Історія</th>`+
-      `<th>Де опинились</th><th class="r">Кроків</th><th class="r">Час</th><th>Що саме</th></tr></thead><tbody>`];
-    if(!view.length) html.push(`<tr><td colspan="8" style="color:var(--faint);padding:18px 10px">Під фільтр нічого не підпало.</td></tr>`);
+    const th=(key,label,cls)=>{
+      const on=tdsSort.k===key;
+      return `<th class="sortable${cls?" "+cls:""}" data-sort="${key}"`+
+        (on?` aria-sort="${tdsSort.d>0?"ascending":"descending"}"`:"")+
+        `>${label}<span class="ar">${on?(tdsSort.d>0?"▲":"▼"):"▲"}</span></th>`;
+    };
+    const html=[`<thead><tr>`+th("camp","Кампанія")+th("geo","Гео")+th("verdict","Вердикт")+
+      `<th>Історія</th>`+th("host","Де опинились")+th("clicks","Кліки","r")+
+      th("hops","Кроків","r")+th("ms","Час","r")+`<th>Що саме</th></tr></thead><tbody>`];
+    if(!view.length) html.push(`<tr><td colspan="9" style="color:var(--faint);padding:18px 10px">Під фільтр нічого не підпало.</td></tr>`);
     for(const {r,i} of view){
       const v=TDSV[r[6]]||TDSV.skip, open=tdsOpen.has(i);
       const lastHop=(chains[i]||[]).slice(-1)[0], title=lastHop?lastHop[4]:"";
@@ -2280,7 +2313,6 @@ function KT_boot(D){
           (teams.length>1?`<span class="chip kt" title="інстанс Keitaro">${esc(teamName(teams[r[0]]))}</span> `:"")+
           `<b>${esc(r[2]||"—")}</b>`+
           (r[14]?` <span class="chip slot" title="${esc(TDS.slotParam||"slot")}=${esc(r[14])} — окремий сайт призначення">${esc(TDS.slotParam||"slot")} ${esc(r[14])}</span>`:"")+
-          (r[1]?` <span class="chip" title="кліків у кампанії за ${TDS.trafficDays||7} дн">${fmtInt(r[1])}</span>`:"")+
         `</td>`+
         `<td><span class="chip geo"${r[5]&&r[4].toLowerCase()!==r[5]?` title="у назві кампанії: ${esc(r[4])}"`:""}>${esc((r[5]||r[4]||"—").toUpperCase())}</span></td>`+
         `<td><span class="vd ${v.c}" title="${esc(v.d)}">${v.t}</span></td>`+
@@ -2288,12 +2320,13 @@ function KT_boot(D){
         `<td class="mono" style="font-size:11.5px;color:var(--dim)">${esc(r[7]||"—")}`+
           (title?`<div class="dim-ttl" title="${esc(title)}">${esc(title)}</div>`:"")+
         `</td>`+
+        `<td class="r mono" title="кліків у кампанії за ${TDS.trafficDays||7} дн">${r[1]?fmtInt(r[1]):"—"}</td>`+
         `<td class="r mono">${r[9]}</td>`+
         `<td class="r mono" style="color:var(--faint)">${r[10]?(r[10]/1000).toFixed(1)+" с":"—"}</td>`+
         `<td style="color:var(--faint);font-size:12px">${esc(r[11]||"")}</td></tr>`);
       if(open){
         const ch=chains[i]||[];
-        html.push(`<tr><td colspan="8" style="background:var(--bg2);padding:10px 14px">`+
+        html.push(`<tr><td colspan="9" style="background:var(--bg2);padding:10px 14px">`+
           `<div style="font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--faint);font-weight:600;margin-bottom:4px">Куди вів лінк</div>`+
           // У робочих лінків зберігається лише останній крок: повний ланцюг
           // майже ніколи не відкривають, а на двох тисячах лінків він важить утричі більше.
@@ -2329,6 +2362,14 @@ function KT_boot(D){
       e.stopPropagation();
       tdsPreset={scope:"camp:"+b.dataset.camp, label:"Лише кампанія: "+b.dataset.cname};
       modalKind="tds"; openModal();
+    });
+    document.querySelectorAll("#tdsTbl th.sortable").forEach(h=>h.onclick=()=>{
+      const k=h.dataset.sort;
+      // Перший клік по числовій колонці — спадно: «де найбільше» цікавить
+      // частіше, ніж «де найменше». По текстовій — за абеткою.
+      if(tdsSort.k===k) tdsSort.d=-tdsSort.d;
+      else tdsSort={k, d:SORTS[k].txt?1:-1};
+      renderTds();
     });
     document.querySelectorAll("#tdsTbl .tdsrow").forEach(tr=>tr.onclick=()=>{
       const i=+tr.dataset.i; if(tdsOpen.has(i)) tdsOpen.delete(i); else tdsOpen.add(i); renderTds();
