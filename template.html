@@ -336,6 +336,7 @@
     text-transform:uppercase;letter-spacing:.3px;background:var(--bg2);color:var(--dim);
     border:1px solid transparent;white-space:nowrap}
   .chip.geo{background:var(--info-bg);color:var(--info-ink)}
+  .chip.slot{background:color-mix(in srgb,var(--s4) 12%,#fff);color:var(--s4)}
   .chip.tm{background:color-mix(in srgb,var(--hue,var(--s1)) 12%,#fff);color:var(--hue,var(--s1));
     border-color:color-mix(in srgb,var(--hue,var(--s1)) 28%,#fff)}
   .badge{display:inline-block;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;
@@ -1908,7 +1909,9 @@ function KT_boot(D){
         `<div style="font-size:13px;color:var(--dim);line-height:1.7">`+
         `<b style="color:var(--fg)">Перевірки ще не було.</b><br>`+
         `Запускається вона вручну — кнопкою <b>«Перевірити»</b> вище або через <b>Actions → «Перевірка ТДС-лінків»</b>.<br><br>`+
-        `Лінки беруться з самого Keitaro: кампанія і є ТДС. Беремо ті, що мали трафік за останній тиждень, `+
+        `Лінки беруться з самого Keitaro: кампанія і є ТДС. Для кожної дістаємо з її потоків перелік слотів `+
+        `(<span class="mono">?slot=N</span> — кожен веде на окремий сайт) і перевіряємо кожен окремо. `+
+        `Беремо кампанії з трафіком за останній тиждень, `+
         `відкриваємо кожну з резидентської IP тієї країни, яка вказана в назві кампанії, і йдемо по всьому `+
         `ланцюгу редіректів — включно з <span class="mono">meta refresh</span> і переходами зі скрипта — `+
         `щоб побачити, куди реально потрапляє юзер.<br><br>`+
@@ -1921,6 +1924,7 @@ function KT_boot(D){
 
     const rows=TDS.rows||[], chains=TDS.chains||[];
     // Кампанії без гео не перевірялись — їх немає сенсу тримати у знаменнику.
+    const slotRows=rows.filter(r=>r[14]).length;
     const skipN=TDS.stat.skip||0, proxyN=TDS.stat.proxy||0;
     const checkedN=rows.length-skipN-proxyN;
     const okN=(TDS.stat.ok||0)+(TDS.stat.lander||0), bad=checkedN-okN;
@@ -1970,7 +1974,7 @@ function KT_boot(D){
       if(tdsFilt==="ok"&&!fine) return false;
       if(tdsFilt==="bad"&&(fine||moot)) return false;
       if(tdsGeo!=="all"&&r[4]!==tdsGeo) return false;
-      if(q&&!((r[2]+" "+r[3]+" "+r[7]+" "+r[12]).toLowerCase().includes(q))) return false;
+      if(q&&!((r[2]+" "+r[3]+" "+r[7]+" "+r[12]+" "+(r[14]||"")).toLowerCase().includes(q))) return false;
       return true;
     });
     // найболючіше зверху: спершу зламане, тоді «не туди», тоді решта
@@ -1978,7 +1982,8 @@ function KT_boot(D){
 
     document.getElementById("tdsSub").textContent=
       `${TDS.scope==="all"?"усі команди":"обране: "+TDS.scope} · ${TDS.tabs.length} ${plural(TDS.tabs.length,["команда","команди","команд"])}`
-      + (TDS.offerHosts?` · довідник оферів: ${fmtInt(TDS.offerHosts)} ${plural(TDS.offerHosts,["хост","хости","хостів"])}`:"");
+      + (TDS.offerHosts?` · довідник оферів: ${fmtInt(TDS.offerHosts)} ${plural(TDS.offerHosts,["хост","хости","хостів"])}`:"")
+      + (slotRows?` · зі слотом: ${fmtInt(slotRows)}`:"");
 
     const html=[`<thead><tr><th>Кампанія</th><th>Префікс</th><th>Гео</th><th>Вердикт</th>`+
       `<th>Де опинились</th><th class="r">Кроків</th><th class="r">Час</th><th>Що саме</th></tr></thead><tbody>`];
@@ -1986,7 +1991,10 @@ function KT_boot(D){
     for(const {r,i} of view){
       const v=TDSV[r[6]]||TDSV.skip, open=tdsOpen.has(i);
       html.push(`<tr class="tdsrow" tabindex="0" role="button" data-key="1" data-i="${i}">`+
-        `<td><b>${esc(r[2]||"—")}</b>${r[1]?` <span class="chip" title="кліків за ${TDS.trafficDays||7} дн">${fmtInt(r[1])}</span>`:""}</td>`+
+        `<td><b>${esc(r[2]||"—")}</b>`+
+          (r[14]?` <span class="chip slot" title="${esc(TDS.slotParam||"slot")}=${esc(r[14])} — окремий сайт призначення">${esc(TDS.slotParam||"slot")} ${esc(r[14])}</span>`:"")+
+          (r[1]?` <span class="chip" title="кліків у кампанії за ${TDS.trafficDays||7} дн">${fmtInt(r[1])}</span>`:"")+
+        `</td>`+
         `<td style="color:var(--dim)">${esc(r[3]||"—")}</td>`+
         `<td><span class="chip geo"${r[5]&&r[4].toLowerCase()!==r[5]?` title="у таблиці: ${esc(r[4])}"`:""}>${esc((r[5]||r[4]||"—").toUpperCase())}</span></td>`+
         `<td><span class="vd ${v.c}" title="${esc(v.d)}">${v.t}</span></td>`+

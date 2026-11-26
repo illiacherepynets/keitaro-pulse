@@ -63,6 +63,12 @@ const UA_DESKTOP = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
 // за останні дні, і йдемо від найбільших: зламаний лінк, через який ніхто не
 // ходить, нікому не болить.
 const TRAFFIC_DAYS = 7;
+// Слот у лінку — це GET-параметр, який Keitaro кладе у sub_id_1, а потоки
+// кампанії фільтрують по ньому: один слот = один сайт призначення. Саме через
+// це голий лінк без ?slot= віддавав порожню сторінку.
+const SLOT_PARAM  = process.env.TDS_SLOT_PARAM  || "slot";
+const SLOT_FILTER = process.env.TDS_SLOT_FILTER || "sub_id_1";
+const MAX_SLOTS   = 40;     // страховка від кампанії з сотнею потоків
 const TZ = "Europe/Kyiv";
 const dayAgo = (n) => new Date(Date.now() - n * 864e5).toISOString().slice(0, 10);
 const num = (v) => { const n = Number(v); return isNaN(n) ? 0 : n; };
@@ -101,7 +107,28 @@ function scopeParts(scope) {
 const wantTeam = (name, sp) => sp.all || !sp.names.length || sp.names.includes(String(name).toLowerCase());
 const wantGeo  = (geo,  sp) => sp.all || !sp.geos.length  || sp.geos.includes(geo);
 
-async function loadLinks(scope) {
+// Які слоти живуть у цій кампанії під це гео. Беремо з потоків, а не вгадуємо:
+// потік без фільтра country підходить усім, з фільтром — лише своїм країнам.
+function slotsFromStreams(streams, geo) {
+  const act = (streams || []).filter((s) => s.state === "active");
+  const slotsOf = (s) => {
+    const f = (s.filters || []).find((x) => x.name === SLOT_FILTER && x.mode !== "reject");
+    return Array.isArray(f?.payload) ? f.payload.map(String) : [];
+  };
+  const geoFits = (s) => {
+    const f = (s.filters || []).find((x) => x.name === "country");
+    if (!Array.isArray(f?.payload)) return true;
+    const has = f.payload.map((x) => String(x).toUpperCase()).includes(String(geo).toUpperCase());
+    return f.mode === "reject" ? !has : has;
+  };
+  // Спершу потоки саме під це гео; якщо таких немає — беремо всі, бо гео могли
+  // просто не прописати, а слоти однаково існують.
+  let slots = [...new Set(act.filter(geoFits).flatMap(slotsOf))];
+  if (!slots.length) slots = [...new Set(act.flatMap(slotsOf))];
+  return slots.sort((a, b) => (Number(a) || 0) - (Number(b) || 0)).slice(0, MAX_SLOTS);
+}
+
+async function loadLinks(scope, limit) {
   if (process.env.TDS_FILE) {                       // офлайн-режим для тестів
     const j = JSON.parse(await readFile(process.env.TDS_FILE, "utf8"));
     const links = Array.isArray(j) ? j : j.links;
@@ -134,12 +161,31 @@ async function loadLinks(scope) {
       .filter((r) => r.clicks > 0 && wantGeo(r.geo, sp))
       .sort((a, b) => b.clicks - a.clicks);
 
-    for (const r of rows) links.push({
-      tab: T.name, clicks: r.clicks, brand: r.c.name, partner: r.prefix,
-      geoRaw: r.geo, url: String(r.c.domain).replace(/\/+$/, "") + "/" + r.c.alias,
-      ref: "", row: r.c.id,
-    });
-    log(`[${T.name}] активних ${camps.length} · із трафіком за ${TRAFFIC_DAYS} дн ${rows.length} · оферів ${offers.length}`);
+    // Потоки тягнемо лише для тих кампаній, що реально підуть у перевірку:
+    // 1981 зайвий запит нікому не потрібен. Ідемо згори вниз за трафіком, поки
+    // не набереться ліміт лінків.
+    let withSlots = 0, noSlots = 0;
+    for (let i = 0; i < rows.length && links.length < limit; i += 10) {
+      const batch = rows.slice(i, i + 10);
+      const streams = await Promise.all(batch.map((r) =>
+        kt.get(`/campaigns/${r.c.id}/streams`).catch(() => [])));
+      batch.forEach((r, k) => {
+        const base = String(r.c.domain).replace(/\/+$/, "") + "/" + r.c.alias;
+        const slots = slotsFromStreams(streams[k], r.geo);
+        const common = { tab: T.name, clicks: r.clicks, brand: r.c.name, partner: r.prefix,
+                         geoRaw: r.geo, ref: "", row: r.c.id };
+        if (slots.length) {
+          withSlots++;
+          for (const sl of slots) links.push({ ...common, slot: sl,
+            url: `${base}?${SLOT_PARAM}=${encodeURIComponent(sl)}` });
+        } else {
+          noSlots++;
+          links.push({ ...common, slot: "", url: base });
+        }
+      });
+    }
+    log(`[${T.name}] активних ${camps.length} · із трафіком за ${TRAFFIC_DAYS} дн ${rows.length}` +
+        ` · зі слотами ${withSlots} · без слотів ${noSlots} · лінків ${links.length} · оферів ${offers.length}`);
   }
   if (!links.length && !sp.all) throw new Error(`під scope="${scope}" не знайшлось кампаній із трафіком`);
   return { links, offerHosts };
@@ -523,7 +569,9 @@ async function main() {
 
   if (process.env.TDS_SELFTEST) return selfTest(proxy, ua);
 
-  let { links, offerHosts } = await loadLinks(scope);
+  // Ліміт рахується в лінках, а не в кампаніях: у однієї кампанії слотів буває
+  // з десяток, і без цього прогін роздувся б на тисячі запитів.
+  let { links, offerHosts } = await loadLinks(scope, limit);
   const total = links.length;
   // Список уже відсортований за трафіком, тож ліміт відрізає найменш важливе.
   if (links.length > limit) { log(`Лінків ${total}, ліміт ${limit} — беремо ${limit} найтрафіковіших`); links = links.slice(0, limit); }
@@ -540,7 +588,7 @@ async function main() {
     stat[r.verdict] = (stat[r.verdict] || 0) + 1;
     rows.push([tabs.indexOf(l.tab), l.clicks || 0, l.brand, l.partner, l.geoRaw, r.cc || "",
       r.verdict, r.finalHost || "", r.refHost || "", (r.chain || []).length,
-      r.ms || 0, r.note || "", l.url.slice(0, CHAIN_URL_MAX), l.row]);
+      r.ms || 0, r.note || "", l.url.slice(0, CHAIN_URL_MAX), l.row, l.slot || ""]);
     chains.push((r.chain || []).map((c) => [String(c.url).slice(0, CHAIN_URL_MAX),
       c.status, c.via || "", c.ms || 0, (c.title || "").slice(0, 90), c.note || ""]));
   });
@@ -550,6 +598,7 @@ async function main() {
     generated: new Date().toLocaleString("uk-UA", { timeZone: "Europe/Kyiv" }),
     scope, ua: uaKind, total, checked: links.length, stat, tabs, rows, chains,
     source: "keitaro", trafficDays: TRAFFIC_DAYS, offerHosts: offerHosts.size,
+    slotParam: SLOT_PARAM,
   };
 
   const password = process.env.KT_PASSWORD || "";
