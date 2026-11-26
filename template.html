@@ -100,6 +100,9 @@
   input.fq::placeholder,input.search::placeholder{color:var(--faint)}
   input.fq:focus,input.search:focus,.minput:focus{outline:none;border-color:var(--s1);box-shadow:inset 0 0 0 1px var(--s1)}
   input.search{width:auto;max-width:200px;font-size:12.5px;height:30px}
+  #tdsSearch{max-width:180px}
+  /* Кнопки дій тримаємо купкою, щоб «Перевірити» не зʼїжджала сама на рядок */
+  .tools .actions{display:inline-flex;gap:8px;margin-left:auto}
   select.pill,select.day{
     appearance:none;background:var(--panel) url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2344546F' stroke-width='2.4' stroke-linecap='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") no-repeat right 7px center;
     border:1px solid var(--border-strong);border-radius:var(--radius-sm);color:var(--fg);font:inherit;font-size:13px;
@@ -338,6 +341,36 @@
   .chip.geo{background:var(--info-bg);color:var(--info-ink)}
   .chip.slot{background:color-mix(in srgb,var(--s4) 12%,#fff);color:var(--s4)}
   .chip.kt{background:color-mix(in srgb,var(--s2) 12%,#fff);color:var(--s2)}
+  /* ── Фільтри: кнопка відкриває список із чекбоксами, як в Jira ─────────── */
+  .fwrap{position:relative;display:inline-flex}
+  .fbtn{display:inline-flex;align-items:center;gap:6px;background:var(--panel);
+    border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:6px 10px;
+    font:inherit;font-size:12.5px;font-weight:500;color:var(--fg);cursor:pointer;white-space:nowrap}
+  .fbtn:hover{background:var(--bg2)}
+  .fbtn:focus-visible{outline:none;border-color:var(--s1);box-shadow:inset 0 0 0 1px var(--s1)}
+  .fbtn.on{background:var(--info-bg);border-color:var(--s1);color:var(--info-ink);font-weight:600}
+  .fbtn .cnt{background:var(--s1);color:#fff;border-radius:999px;font-size:10.5px;font-weight:700;
+    padding:0 6px;min-width:17px;text-align:center;line-height:16px}
+  .fbtn .car{font-size:9px;opacity:.55;margin-left:1px}
+  .fdrop{position:absolute;top:calc(100% + 5px);left:0;z-index:40;background:var(--panel);
+    border:1px solid var(--border);border-radius:var(--radius);box-shadow:0 8px 24px rgba(9,30,66,.2);
+    padding:6px;min-width:250px;max-height:380px;overflow:auto}
+  .fdrop .ghead{display:flex;align-items:center;gap:6px;font-size:10px;text-transform:uppercase;
+    letter-spacing:.5px;color:var(--faint);font-weight:700;padding:9px 8px 4px}
+  .fdrop .ghead button{margin-left:auto;border:0;background:none;color:var(--s1);font:inherit;
+    font-size:10.5px;font-weight:700;cursor:pointer;text-transform:none;letter-spacing:0}
+  .fdrop label{display:flex;align-items:center;gap:9px;padding:6px 8px;border-radius:var(--radius-xs);
+    cursor:pointer;font-size:13px}
+  .fdrop label:hover{background:var(--bg2)}
+  .fdrop input{accent-color:var(--s1);margin:0;width:14px;height:14px;flex:none}
+  .fdrop .n{margin-left:auto;color:var(--faint);font-size:11.5px;font-variant-numeric:tabular-nums}
+  .fdrop .none{padding:10px 8px;color:var(--faint);font-size:12.5px}
+  /* Лозенжі під смужкою — теж фільтр: клік по стану лишає тільки його */
+  .tdsleg button{border:0;background:none;padding:0;font:inherit;cursor:pointer;display:inline-flex;
+    align-items:center;gap:5px;border-radius:var(--radius-xs)}
+  .tdsleg button:focus-visible{outline:2px solid var(--s1);outline-offset:2px}
+  .tdsleg button[aria-pressed="true"] .vd{box-shadow:0 0 0 2px var(--panel),0 0 0 3.5px currentColor}
+  .tdsleg button:not([aria-pressed="true"]):hover .vd{box-shadow:0 0 0 2px var(--panel),0 0 0 3px var(--border-strong)}
   /* Смужка історії: чи падає лінк стабільно, чи це був разовий збій */
   .dim-ttl{font-family:inherit;font-size:11px;color:var(--faint);max-width:230px;
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px}
@@ -791,13 +824,16 @@ function KT_boot(D){
             <div class="phead">
               <div><h2>Перевірка ТДС-лінків</h2><div class="psub" id="tdsSub"></div></div>
               <div class="tools">
-                <div class="seg alt" id="tdsFilt"><button data-f="bad" title="Те, що справді зламано: порожня сторінка, блок, помилка сервера, не той хост">⚠ Проблемні</button><button data-f="warn" title="Капча, петля і сторінки, що ще вантажаться: живий браузер їх зазвичай проходить, тож у проблемні вони не йдуть">Капчі</button><button data-f="ok">Все гуд</button><button data-f="all">Усі</button></div>
-                <select class="pill" id="tdsTeam" title="Який інстанс Keitaro"></select>
-                <select class="pill" id="tdsGeo" title="Гео"></select>
-                <input class="search" id="tdsSearch" placeholder="кампанія, префікс, хост…">
-                <button class="mbtn" id="tdsCsv" type="button" title="Вивантажити те, що зараз у таблиці, у CSV">CSV</button>
-                <button class="mbtn" id="tdsCopy" type="button" title="Скопіювати текстом — щоб одразу скинути афіліату">Скопіювати</button>
-                <button class="mbtn primary" id="tdsRun" type="button">Перевірити</button>
+                <input class="search" id="tdsSearch" placeholder="кампанія, хост, слот…">
+                <div class="fwrap"><button class="fbtn" id="fStatus" type="button" aria-expanded="false">Стан<span class="cnt" hidden></span><span class="car">▼</span></button><div class="fdrop" id="dStatus" hidden></div></div>
+                <div class="fwrap" id="wTeam"><button class="fbtn" id="fTeam" type="button" aria-expanded="false">Keitaro<span class="cnt" hidden></span><span class="car">▼</span></button><div class="fdrop" id="dTeam" hidden></div></div>
+                <div class="fwrap"><button class="fbtn" id="fGeo" type="button" aria-expanded="false">Гео<span class="cnt" hidden></span><span class="car">▼</span></button><div class="fdrop" id="dGeo" hidden></div></div>
+                <button class="fbtn" id="tdsReset" type="button" hidden>Скинути</button>
+                <span class="actions">
+                  <button class="mbtn" id="tdsCsv" type="button" title="Вивантажити те, що зараз у таблиці, у CSV">CSV</button>
+                  <button class="mbtn" id="tdsCopy" type="button" title="Скопіювати текстом — щоб одразу скинути афіліату">Скопіювати</button>
+                  <button class="mbtn primary" id="tdsRun" type="button">Перевірити</button>
+                </span>
               </div>
             </div>
             <div id="tdsDist"></div>
@@ -2003,7 +2039,11 @@ function KT_boot(D){
       (pad<3?`<i></i>`.repeat(3-pad):"")+`</span>`;
   }
 
-  let TDS=null, tdsState="idle", tdsFilt="bad", tdsQ="", tdsGeo="all", tdsTeam="all";
+  // Кожен фільтр — набір обраного. Порожній набір означає «не фільтруємо»:
+  // так не треба тримати окреме значення «усі» й звіряти його всюди.
+  const BUCKETS=[["bad","Проблемні"],["warn","Капчі"],["ok","Все гуд"],["mute","Не перевірені"]];
+  const tdsSel={status:new Set(TDS_ORDER.filter(v=>(TDSV[v]||{}).c==="bad")), team:new Set(), geo:new Set()};
+  let TDS=null, tdsState="idle", tdsQ="";
   // Що саме перепровірити, коли тиснуть «Перевірити цю кампанію»: {scope, label}
   let tdsPreset=null;
   const tdsOpen=new Set();
@@ -2025,6 +2065,103 @@ function KT_boot(D){
     }catch(e){ tdsState="err"; TDS={err:String(e.message||e)}; }
     renderTds();
   }
+
+
+  // ── Фільтри у стилі Jira ───────────────────────────────────────────────────
+  // Кнопка показує, що обрано, список — чекбокси з лічильниками. Лічильники
+  // рахуються по всьому набору, а не по вже відфільтрованому: інакше вибір
+  // одного стану обнуляв би решту і до них не було б як повернутись.
+  const FD=[["fStatus","dStatus","status","Стан"],["fTeam","dTeam","team","Keitaro"],["fGeo","dGeo","geo","Гео"]];
+
+  function closeDrops(except){
+    for(const [bid,did] of FD){
+      if(did===except) continue;
+      document.getElementById(did).hidden=true;
+      document.getElementById(bid).setAttribute("aria-expanded","false");
+    }
+  }
+
+  function drawFilters(rows, teams, geos){
+    const tally=(key)=>{ const m=new Map();
+      for(const r of rows){ const k=key(r); if(k==null||k===""||k==="—") continue; m.set(k,(m.get(k)||0)+1); }
+      return m; };
+    const stCnt=tally(r=>r[6]), teamCnt=tally(r=>teams[r[0]]), geoCnt=tally(r=>r[4]);
+
+    const stHtml=BUCKETS.map(([c,label])=>{
+      const vs=TDS_ORDER.filter(v=>(TDSV[v]||{}).c===c&&stCnt.get(v));
+      if(!vs.length) return "";
+      return `<div class="ghead">${label}<button type="button" data-bucket="${c}">лише ці</button></div>`+
+        vs.map(v=>`<label><input type="checkbox" data-f="status" value="${esc(v)}"${tdsSel.status.has(v)?" checked":""}>`+
+          `<span class="vd ${TDSV[v].c}">${TDSV[v].t}</span><span class="n">${fmtInt(stCnt.get(v))}</span></label>`).join("");
+    }).join("");
+
+    const tHtml=teams.map(t=>({v:t,n:teamName(t),c:teamCnt.get(t)||0})).filter(o=>o.c)
+      .sort((a,b)=>a.n.localeCompare(b.n,"uk"))
+      .map(o=>`<label><input type="checkbox" data-f="team" value="${esc(o.v)}"${tdsSel.team.has(o.v)?" checked":""}>`+
+        `${esc(o.n)}<span class="n">${fmtInt(o.c)}</span></label>`).join("");
+
+    const gHtml=geos.filter(g=>geoCnt.get(g))
+      .map(g=>`<label><input type="checkbox" data-f="geo" value="${esc(g)}"${tdsSel.geo.has(g)?" checked":""}>`+
+        `<span class="chip geo">${esc(g)}</span><span class="n">${fmtInt(geoCnt.get(g))}</span></label>`).join("");
+
+    const put=(id,html,empty)=>{ const el=document.getElementById(id);
+      el.innerHTML=html||`<div class="none">${empty}</div>`; };
+    put("dStatus",stHtml,"Нема чого фільтрувати");
+    put("dTeam",tHtml,"Лише один Keitaro");
+    put("dGeo",gHtml,"Гео не визначені");
+    // Коли Keitaro один, фільтр по ньому — порожній контрол. Ховаємо.
+    document.getElementById("wTeam").hidden = teams.length<2;
+
+    const cap=(bid,name,set,toText)=>{
+      const btn=document.getElementById(bid), cnt=btn.querySelector(".cnt");
+      const n=set.size;
+      btn.classList.toggle("on",n>0);
+      btn.firstChild.textContent = n===1 ? `${name}: ${toText([...set][0])}` : name;
+      cnt.hidden = n<2; cnt.textContent = n;
+    };
+    cap("fStatus","Стан",tdsSel.status,v=>(TDSV[v]||{}).t||v);
+    cap("fTeam","Keitaro",tdsSel.team,teamName);
+    cap("fGeo","Гео",tdsSel.geo,v=>v);
+    document.getElementById("tdsReset").hidden =
+      !(tdsSel.status.size||tdsSel.team.size||tdsSel.geo.size||tdsQ);
+  }
+
+  for(const [bid,did] of FD){
+    document.getElementById(bid).onclick=(e)=>{
+      e.stopPropagation();
+      const d=document.getElementById(did), open=d.hidden;
+      closeDrops(open?did:null);
+      d.hidden=!open;
+      // Правий фільтр інакше вилазить за край вікна — тоді вирівнюємо по правому.
+      if(open){ d.style.left="0"; d.style.right="auto";
+        const r=d.getBoundingClientRect();
+        if(r.right>innerWidth-8){ d.style.left="auto"; d.style.right="0"; } }
+      document.getElementById(bid).setAttribute("aria-expanded",String(open));
+    };
+    // Клік усередині списку не має закривати його — але кнопку «лише ці»
+    // треба обробити саме тут: далі подія не піде, бо ми її й зупиняємо.
+    document.getElementById(did).onclick=(e)=>{
+      e.stopPropagation();
+      const g=e.target.closest("[data-bucket]"); if(!g) return;
+      tdsSel.status.clear();
+      for(const v of TDS_ORDER) if((TDSV[v]||{}).c===g.dataset.bucket) tdsSel.status.add(v);
+      tdsOpen.clear(); renderTds();
+    };
+  }
+  addEventListener("click",()=>closeDrops(null));
+  addEventListener("keydown",e=>{ if(e.key==="Escape") closeDrops(null); });
+
+  document.addEventListener("change",e=>{
+    const i=e.target; if(!(i instanceof HTMLInputElement)||!i.dataset.f) return;
+    const set=tdsSel[i.dataset.f]; if(!set) return;
+    i.checked?set.add(i.value):set.delete(i.value);
+    tdsOpen.clear(); renderTds();
+  });
+  document.getElementById("tdsReset").onclick=()=>{
+    tdsSel.status.clear(); tdsSel.team.clear(); tdsSel.geo.clear();
+    tdsQ=""; document.getElementById("tdsSearch").value="";
+    closeDrops(null); tdsOpen.clear(); renderTds();
+  };
 
   function tdsInfo(html){
     document.getElementById("tdsKpis").innerHTML="";
@@ -2086,30 +2223,21 @@ function KT_boot(D){
       .filter(g=>g[2]>0);
     document.getElementById("tdsDist").innerHTML=
       `<div class="tdsbar">${grp.map(g=>`<i style="width:${g[2]/rows.length*100}%;background:${TDSC[g[0]]}" title="${g[1]}: ${g[2]}"></i>`).join("")}</div>`+
-      `<div class="tdsleg">${present.map(v=>`<span title="${esc(TDSV[v].d)}">`+
-        `<span class="vd ${TDSV[v].c}">${TDSV[v].t}</span> ${fmtInt(TDS.stat[v])}</span>`).join("")}</div>`;
+      `<div class="tdsleg">${present.map(v=>
+        `<button type="button" data-st="${v}" aria-pressed="${tdsSel.status.has(v)}" title="${esc(TDSV[v].d)} · клік — лишити тільки це">`+
+        `<span class="vd ${TDSV[v].c}">${TDSV[v].t}</span> ${fmtInt(TDS.stat[v])}</button>`).join("")}</div>`;
+    // Клік по стану в легенді лишає тільки його — найкоротший шлях до
+    // «покажи мені саме петлі», без відкривання списків.
+    document.querySelectorAll("#tdsDist [data-st]").forEach(b=>b.onclick=()=>{
+      const v=b.dataset.st;
+      if(tdsSel.status.size===1&&tdsSel.status.has(v)) tdsSel.status.clear();
+      else { tdsSel.status.clear(); tdsSel.status.add(v); }
+      tdsOpen.clear(); renderTds();
+    });
 
-    // Гео-фільтр будуємо з того, що реально є в результатах
     const teams=TDS.tabs||[];
-    const tsel=document.getElementById("tdsTeam");
-    if(tsel.dataset.built!=="1"){
-      // Коли Keitaro один, вибирати нема з чого — ховаємо, щоб не плодити порожні контроли.
-      if(teams.length<2){ tsel.style.display="none"; }
-      else {
-        tsel.innerHTML=`<option value="all">Keitaro: усі</option>`+
-          teams.map(t=>({v:t,n:teamName(t)})).sort((a,b)=>a.n.localeCompare(b.n,"uk"))
-            .map(o=>`<option value="${esc(o.v)}">${esc(o.n)}</option>`).join("");
-        tsel.value=tdsTeam;
-      }
-      tsel.dataset.built="1";
-    }
-
     const geos=[...new Set(rows.map(r=>r[4]).filter(g=>g&&g!=="—"))].sort();
-    const sel=document.getElementById("tdsGeo");
-    if(sel.dataset.built!=="1"||sel.options.length!==geos.length+1){
-      sel.innerHTML=`<option value="all">Гео: усі</option>`+geos.map(g=>`<option value="${esc(g)}">${esc(g)}</option>`).join("");
-      sel.dataset.built="1"; sel.value=tdsGeo;
-    }
+    drawFilters(rows, teams, geos);
 
     const q=tdsQ.toLowerCase();
     let view=rows.map((r,i)=>({r,i})).filter(({r})=>{
@@ -2121,10 +2249,9 @@ function KT_boot(D){
       //          у «проблемні» вони не йдуть і не роздувають список
       //   ok   — дійшли куди треба
       //   mute — перевірити не вийшло (немає гео, не дав проксі)
-      const c=(TDSV[r[6]]||TDSV.skip).c;
-      if(tdsFilt!=="all"&&c!==tdsFilt) return false;
-      if(tdsTeam!=="all"&&(TDS.tabs||[])[r[0]]!==tdsTeam) return false;
-      if(tdsGeo!=="all"&&r[4]!==tdsGeo) return false;
+      if(tdsSel.status.size&&!tdsSel.status.has(r[6])) return false;
+      if(tdsSel.team.size&&!tdsSel.team.has((TDS.tabs||[])[r[0]])) return false;
+      if(tdsSel.geo.size&&!tdsSel.geo.has(r[4])) return false;
       if(q&&!((r[2]+" "+r[3]+" "+r[7]+" "+r[12]+" "+(r[14]||"")).toLowerCase().includes(q))) return false;
       return true;
     });
@@ -2227,17 +2354,9 @@ function KT_boot(D){
       (proxyN?` ${fmtInt(proxyN)} ${plural(proxyN,["лінк","лінки","лінків"])} не вдалось перевірити через проксі — варто перезапустити.`:"");
   }
 
-  document.getElementById("tdsFilt").addEventListener("click",e=>{
-    const b=e.target.closest("button"); if(!b)return;
-    tdsFilt=b.dataset.f; [...e.currentTarget.children].forEach(x=>x.classList.toggle("on",x.dataset.f===tdsFilt));
-    tdsOpen.clear(); renderTds();
-  });
-  document.getElementById("tdsGeo").addEventListener("change",e=>{ tdsGeo=e.target.value; tdsOpen.clear(); renderTds(); });
-  document.getElementById("tdsTeam").addEventListener("change",e=>{ tdsTeam=e.target.value; tdsOpen.clear(); renderTds(); });
   let tdsTimer=null;
   document.getElementById("tdsSearch").addEventListener("input",e=>{
     tdsQ=e.target.value.trim(); clearTimeout(tdsTimer); tdsTimer=setTimeout(renderTds,180); });
-  [...document.getElementById("tdsFilt").children].forEach(x=>x.classList.toggle("on",x.dataset.f===tdsFilt));
   // ── ручне оновлення даних ──────────────────────────────────────────────────
   // Сторінка статична, бекенду немає. Тому два шляхи: посилання на GitHub
   // Actions (працює завжди) і запуск одним кліком, якщо користувач один раз
