@@ -1895,6 +1895,17 @@ function KT_boot(D){
     proxy:    {t:"проксі",        c:"mute", d:"не вина лінка: не вийшло вийти з цієї країни"},
     skip:     {t:"пропущено",     c:"mute", d:"у назві кампанії не знайшлось гео"},
   };
+  // Назви команд. У даних вони можуть бути знеособленими («Команда 3») —
+  // так їх зберігає секрет, щоб не світитись у публічних логах Actions.
+  // Підставляємо людські ще й тут, на показі: інакше дані, зняті до правки
+  // в tds.mjs, показували б «Команда 3» там, де на «Огляді» стоїть
+  // «Monobrands», і довелось би чекати нового прогону заради самих назв.
+  const TEAM_FIX=["Folders","Drop domains","Monobrands","Asia","Italy"];
+  const teamName=(v)=>{
+    const m=/^\s*команда\s*(\d+)\s*$/i.exec(String(v||""));
+    return (m&&TEAM_FIX[+m[1]-1])||String(v||"");
+  };
+
   const TDS_ORDER = ["empty","blocked","dead","http","mismatch","challenge","loop","long","lander","ok","proxy","skip"];
   const TDSC = {ok:"var(--good)",bad:"var(--crit)",warn:"var(--warn)",mute:"var(--border-strong)"};
 
@@ -1910,7 +1921,7 @@ function KT_boot(D){
     const ch=(TDS.chains||[])[i]||[];
     const last=ch[ch.length-1];
     return {
-      keitaro:(TDS.tabs||[])[r[0]]||"",
+      keitaro:teamName((TDS.tabs||[])[r[0]]),
       camp:r[2]||"", id:r[13]||"", slot:r[14]||"",
       geo:(r[5]||r[4]||"").toUpperCase(),
       verdict:VNAME(r[6]), note:r[11]||"",
@@ -2081,7 +2092,8 @@ function KT_boot(D){
       if(teams.length<2){ tsel.style.display="none"; }
       else {
         tsel.innerHTML=`<option value="all">Keitaro: усі</option>`+
-          teams.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join("");
+          teams.map(t=>({v:t,n:teamName(t)})).sort((a,b)=>a.n.localeCompare(b.n,"uk"))
+            .map(o=>`<option value="${esc(o.v)}">${esc(o.n)}</option>`).join("");
         tsel.value=tdsTeam;
       }
       tsel.dataset.built="1";
@@ -2116,8 +2128,8 @@ function KT_boot(D){
     // Перше питання до такої таблиці — «а це взагалі яка Keitaro?». Тому
     // інстанси названі поіменно, а не пораховані.
     const who = TDS.scope==="all"
-      ? `Keitaro: ${teams.join(", ")||"—"}`
-      : /^camp:/i.test(TDS.scope) ? `одна кампанія · Keitaro: ${teams.join(", ")||"—"}`
+      ? `Keitaro: ${teams.map(teamName).sort((a,b)=>a.localeCompare(b,"uk")).join(", ")||"—"}`
+      : /^camp:/i.test(TDS.scope) ? `одна кампанія · Keitaro: ${teams.map(teamName).join(", ")||"—"}`
       : `обране: ${TDS.scope}`;
     tdsView=view;
     document.getElementById("tdsSub").textContent = who
@@ -2132,7 +2144,7 @@ function KT_boot(D){
       const lastHop=(chains[i]||[]).slice(-1)[0], title=lastHop?lastHop[4]:"";
       html.push(`<tr class="tdsrow" tabindex="0" role="button" data-key="1" data-i="${i}">`+
         `<td>`+
-          (teams.length>1?`<span class="chip kt" title="інстанс Keitaro">${esc(teams[r[0]]||"?")}</span> `:"")+
+          (teams.length>1?`<span class="chip kt" title="інстанс Keitaro">${esc(teamName(teams[r[0]]))}</span> `:"")+
           `<b>${esc(r[2]||"—")}</b>`+
           (r[14]?` <span class="chip slot" title="${esc(TDS.slotParam||"slot")}=${esc(r[14])} — окремий сайт призначення">${esc(TDS.slotParam||"slot")} ${esc(r[14])}</span>`:"")+
           (r[1]?` <span class="chip" title="кліків у кампанії за ${TDS.trafficDays||7} дн">${fmtInt(r[1])}</span>`:"")+
@@ -2399,7 +2411,8 @@ function KT_boot(D){
         (tdsPreset?`<option value="${esc(tdsPreset.scope)}" selected>${esc(tdsPreset.label)}</option>`:"")+
         `<option value="all"${tdsPreset?"":" selected"}>Усе: всі Keitaro й усі гео</option>`+
         (teams.length>1?`<optgroup label="Окремий Keitaro">`+
-          teams.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join("")+`</optgroup>`:"")+
+          teams.map(t=>({v:t,n:teamName(t)})).sort((a,b)=>a.n.localeCompare(b.n,"uk"))
+            .map(o=>`<option value="${esc(o.v)}">${esc(o.n)}</option>`).join("")+`</optgroup>`:"")+
         (geos.length?`<optgroup label="Окреме гео">`+
           geos.map(g=>`<option value="${esc(g)}">${esc(g)}</option>`).join("")+`</optgroup>`:"")+
       `</select>`+
