@@ -29,7 +29,7 @@ import tls from "node:tls";
 import { writeFile, mkdir, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { encryptData } from "./crypto.mjs";
+import { encryptData, decryptData } from "./crypto.mjs";
 import { parseCampaign } from "./campaign.mjs";
 
 const __dir = dirname(fileURLToPath(import.meta.url));
@@ -372,11 +372,18 @@ function nextUrl(r, cur) {
 }
 function abs(href, base) { try { return new URL(href, base).toString(); } catch { return null; } }
 
-const BLOCK_SIGN = [
+// Сторінка-челендж: юзера не відрізали, а попросили довести, що він людина.
+const CHALLENGE_SIGN = [
   /just a moment/i, /cf-browser-verification/i, /checking your browser/i,
-  /attention required/i, /access denied/i, /request blocked/i, /403 forbidden/i,
-  /sorry, you have been blocked/i, /ray id/i,
+  /enable javascript and cookies to continue/i, /challenge-platform/i,
 ];
+// Глухий блок: далі не пустять ні за яких умов.
+const BLOCK_SIGN = [
+  /attention required/i, /access denied/i, /request blocked/i, /403 forbidden/i,
+  /sorry, you have been blocked/i, /not available in your country/i,
+  /доступ (?:заборонено|ограничен)/i,
+];
+const looksChallenge = (body) => CHALLENGE_SIGN.some((re) => re.test(body));
 const looksBlocked = (body) => BLOCK_SIGN.some((re) => re.test(body));
 
 const hostOf = (u) => { try { return new URL(u).hostname.replace(/^www\./i, "").toLowerCase(); } catch { return ""; } };
@@ -402,7 +409,7 @@ async function checkLink(link, proxy, ua, offerHosts) {
       break;
     }
     chain.push({ url: cur, status: r.status, via: "", ms: r.ms, title: titleOf(r.body),
-                 len: r.body.length, blocked: looksBlocked(r.body) });
+                 len: r.body.length, blocked: looksBlocked(r.body), challenge: looksChallenge(r.body) });
     const nx = nextUrl(r, cur);
     if (!nx || !nx.url) break;
     chain[chain.length - 1].via = nx.via;
@@ -432,6 +439,9 @@ async function checkLink(link, proxy, ua, offerHosts) {
   // виявитись просто довгим маршрутом. Злиті в один вердикт вони приховували,
   // що саме сталось.
   else if (tooLong)                { verdict = "long";  note = `ланцюг не завершився за ${MAX_HOPS} кроків`; }
+  // Челендж і глухий блок — різні речі: перший живий юзер зазвичай проходить,
+  // другий ні. Злиті в одне, вони однаково фарбувались у червоне.
+  else if (last.challenge)         { verdict = "challenge"; note = last.title || "перевірка «чи ти людина»"; }
   else if (last.blocked || last.status === 403 || last.status === 451) { verdict = "blocked"; note = last.title || `HTTP ${last.status}`; }
   else if (last.status >= 400)     { verdict = "http";  note = `HTTP ${last.status}`; }
   else if (last.status === 0)      { verdict = "dead";  note = last.note || "немає відповіді"; }
@@ -485,7 +495,13 @@ async function pool(items, n, fn) {
   return out;
 }
 
-const VERDICTS = ["ok", "lander", "mismatch", "empty", "blocked", "http", "dead", "loop", "long", "proxy", "skip"];
+const VERDICTS = ["ok", "lander", "mismatch", "empty", "challenge", "blocked", "http", "dead", "loop", "long", "proxy", "skip"];
+
+// Три стани для історії: добре / під питанням / зламано. Детальніший вердикт
+// лишається в рядку, а смужка історії має читатись з одного погляду.
+const BUCKET = { ok: "o", lander: "o", mismatch: "w", challenge: "w", loop: "w", long: "w",
+                 empty: "b", blocked: "b", http: "b", dead: "b" };
+const HIST_MAX = 12;
 
 // Разовий зонд: що саме Keitaro знає про кампанії й домени. Потрібен, бо
 // вгадувати поля тут означало б будувати лінки, яких не існує. У публічний
@@ -618,6 +634,19 @@ async function main() {
   log(`Перевіряю ${links.length} лінків (${uaKind}, по ${CONCURRENCY} паралельно)…`);
   const res = await pool(links, CONCURRENCY, (l) => checkLink(l, proxy, ua, offerHosts));
 
+  // Минулий результат підхоплюємо, щоб дописати історію: без неї не видно,
+  // чи лінк падає стабільно, чи це був разовий збій мережі. Прогін по одному
+  // гео не має стирати історію інших — тому зливаємо, а не перезаписуємо.
+  let hist = {}, runs = [];
+  const password = process.env.KT_PASSWORD || "";
+  if (password) {
+    try {
+      const prev = await decryptData(await readFile(join(__dir, "data", "tds.enc"), "utf8"), password);
+      hist = prev.hist || {}; runs = prev.runs || [];
+      log(`Історія: підхоплено ${Object.keys(hist).length} лінків із ${runs.length} минулих прогонів`);
+    } catch (e) { log("Історія: минулого результату немає — починаємо з чистого"); }
+  }
+
   const tabs = [...new Set(links.map((l) => l.tab))];
   const stat = Object.fromEntries(VERDICTS.map((v) => [v, 0]));
   const rows = [], chains = [];
@@ -627,19 +656,24 @@ async function main() {
     rows.push([tabs.indexOf(l.tab), l.clicks || 0, l.brand, l.partner, l.geoRaw, r.cc || "",
       r.verdict, r.finalHost || "", r.refHost || "", (r.chain || []).length,
       r.ms || 0, r.note || "", l.url.slice(0, CHAIN_URL_MAX), l.row, l.slot || ""]);
+    // індекс 13 = id кампанії, 14 = слот: разом вони й дають ключ історії
     chains.push((r.chain || []).map((c) => [String(c.url).slice(0, CHAIN_URL_MAX),
       c.status, c.via || "", c.ms || 0, (c.title || "").slice(0, 90), c.note || ""]));
+    const key = `${l.row}|${l.slot || ""}`;
+    const mark = BUCKET[r.verdict];
+    if (mark) hist[key] = ((hist[key] || "") + mark).slice(-HIST_MAX);
   });
+  runs = [...runs, { at: new Date().toISOString(), scope, ua: uaKind,
+                     n: links.length, stat: { ...stat } }].slice(-20);
 
   const DATA = {
     checkedAt: new Date().toISOString(),
     generated: new Date().toLocaleString("uk-UA", { timeZone: "Europe/Kyiv" }),
     scope, ua: uaKind, total, checked: links.length, stat, tabs, rows, chains,
     source: "keitaro", trafficDays: TRAFFIC_DAYS, offerHosts: offerHosts.size,
-    slotParam: SLOT_PARAM,
+    slotParam: SLOT_PARAM, hist, runs, histMax: HIST_MAX,
   };
 
-  const password = process.env.KT_PASSWORD || "";
   const outPath = join(__dir, "data", "tds.enc");
   await mkdir(dirname(outPath), { recursive: true });
   if (password) {

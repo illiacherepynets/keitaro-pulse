@@ -337,6 +337,17 @@
     border:1px solid transparent;white-space:nowrap}
   .chip.geo{background:var(--info-bg);color:var(--info-ink)}
   .chip.slot{background:color-mix(in srgb,var(--s4) 12%,#fff);color:var(--s4)}
+  /* Смужка історії: чи падає лінк стабільно, чи це був разовий збій */
+  .dim-ttl{font-family:inherit;font-size:11px;color:var(--faint);max-width:230px;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px}
+  .hist{display:inline-flex;gap:3px;align-items:center}
+  .hist i{width:9px;height:9px;border-radius:2px;background:var(--border-strong);flex:none}
+  .hist i.o{background:var(--good)} .hist i.w{background:var(--warn)} .hist i.b{background:var(--crit)}
+  .runs{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:10px}
+  .run{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--faint);
+    background:var(--bg2);border-radius:var(--radius-xs);padding:3px 8px;font-variant-numeric:tabular-nums}
+  .run s{text-decoration:none;font-weight:700}
+  .run s.o{color:var(--good-ink)} .run s.w{color:var(--warn-ink)} .run s.b{color:var(--crit-ink)}
   .chip.tm{background:color-mix(in srgb,var(--hue,var(--s1)) 12%,#fff);color:var(--hue,var(--s1));
     border-color:color-mix(in srgb,var(--hue,var(--s1)) 28%,#fff)}
   .badge{display:inline-block;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;
@@ -788,6 +799,7 @@ function KT_boot(D){
             <div id="tdsDist"></div>
             <div class="tbl-wrap" style="max-height:none"><table id="tdsTbl"></table></div>
             <div class="hint" id="tdsFoot"></div>
+            <div id="tdsRuns"></div>
           </div>
         </div>
       </div>
@@ -1870,7 +1882,8 @@ function KT_boot(D){
     lander:   {t:"ленд",          c:"ok",   d:"сторінка на домені трекера — локальний ленд, далі юзер іде кліком"},
     mismatch: {t:"не туди",       c:"warn", d:"вийшли на хост, якого немає серед оферів Keitaro"},
     empty:    {t:"порожньо",      c:"bad",  d:"трекер нічого не віддав: під це гео й девайс не підібрався жоден потік. Перевірка ходить без реферера й міток — якщо потік вимагає їх, у живому трафіку може бути все гаразд"},
-    blocked:  {t:"блокує",        c:"bad",  d:"на шляху стоїть захист, капча або бан"},
+    challenge:{t:"капча",         c:"warn", d:"сторінка просить довести, що ти людина — живий юзер зазвичай проходить, бот ні"},
+    blocked:  {t:"блокує",        c:"bad",  d:"глухий блок: далі не пустять ні за яких умов"},
     http:     {t:"помилка",       c:"bad",  d:"сервер віддав помилку"},
     dead:     {t:"не відкрилась", c:"bad",  d:"не достукались до хоста"},
     loop:     {t:"петля",         c:"warn", d:"редіректи ходять по колу — лінк зациклений"},
@@ -1878,8 +1891,23 @@ function KT_boot(D){
     proxy:    {t:"проксі",        c:"mute", d:"не вина лінка: не вийшло вийти з цієї країни"},
     skip:     {t:"пропущено",     c:"mute", d:"у назві кампанії не знайшлось гео"},
   };
-  const TDS_ORDER = ["empty","blocked","dead","http","mismatch","loop","long","lander","ok","proxy","skip"];
+  const TDS_ORDER = ["empty","blocked","dead","http","mismatch","challenge","loop","long","lander","ok","proxy","skip"];
   const TDSC = {ok:"var(--good)",bad:"var(--crit)",warn:"var(--warn)",mute:"var(--border-strong)"};
+
+  // Смужка минулих перевірок цього самого лінка. Один квадратик — один прогін,
+  // найсвіжіший праворуч. Порожні — прогони, у які лінк не потрапив (інше гео
+  // або ліміт), тому вони сірі, а не зелені.
+  function histBar(r){
+    const h=(TDS.hist||{})[r[13]+"|"+(r[14]||"")]||"";
+    if(!h) return `<span class="hist" title="ще не було попередніх перевірок"><i></i></span>`;
+    const max=TDS.histMax||12, pad=Math.max(0,Math.min(max,h.length));
+    const good=(h.match(/o/g)||[]).length;
+    const ttl=`${h.length} ${plural(h.length,["перевірка","перевірки","перевірок"])}, `+
+      `${good} без зауважень · найсвіжіша праворуч`;
+    return `<span class="hist" title="${ttl}">`+
+      [...h.slice(-max)].map(c=>`<i class="${c}"></i>`).join("")+
+      (pad<3?`<i></i>`.repeat(3-pad):"")+`</span>`;
+  }
 
   let TDS=null, tdsState="idle", tdsFilt="bad", tdsQ="", tdsGeo="all";
   const tdsOpen=new Set();
@@ -1899,6 +1927,7 @@ function KT_boot(D){
     document.getElementById("tdsKpis").innerHTML="";
     document.getElementById("tdsDist").innerHTML="";
     document.getElementById("tdsTbl").innerHTML="";
+    const rz=document.getElementById("tdsRuns"); if(rz) rz.innerHTML="";
     document.getElementById("tdsSub").textContent="";
     document.getElementById("tdsFoot").innerHTML=html;
   }
@@ -1986,20 +2015,23 @@ function KT_boot(D){
       + (TDS.offerHosts?` · довідник оферів: ${fmtInt(TDS.offerHosts)} ${plural(TDS.offerHosts,["хост","хости","хостів"])}`:"")
       + (slotRows?` · зі слотом: ${fmtInt(slotRows)}`:"");
 
-    const html=[`<thead><tr><th>Кампанія</th><th>Префікс</th><th>Гео</th><th>Вердикт</th>`+
+    const html=[`<thead><tr><th>Кампанія</th><th>Гео</th><th>Вердикт</th><th>Історія</th>`+
       `<th>Де опинились</th><th class="r">Кроків</th><th class="r">Час</th><th>Що саме</th></tr></thead><tbody>`];
     if(!view.length) html.push(`<tr><td colspan="8" style="color:var(--faint);padding:18px 10px">Під фільтр нічого не підпало.</td></tr>`);
     for(const {r,i} of view){
       const v=TDSV[r[6]]||TDSV.skip, open=tdsOpen.has(i);
+      const lastHop=(chains[i]||[]).slice(-1)[0], title=lastHop?lastHop[4]:"";
       html.push(`<tr class="tdsrow" tabindex="0" role="button" data-key="1" data-i="${i}">`+
         `<td><b>${esc(r[2]||"—")}</b>`+
           (r[14]?` <span class="chip slot" title="${esc(TDS.slotParam||"slot")}=${esc(r[14])} — окремий сайт призначення">${esc(TDS.slotParam||"slot")} ${esc(r[14])}</span>`:"")+
           (r[1]?` <span class="chip" title="кліків у кампанії за ${TDS.trafficDays||7} дн">${fmtInt(r[1])}</span>`:"")+
         `</td>`+
-        `<td style="color:var(--dim)">${esc(r[3]||"—")}</td>`+
-        `<td><span class="chip geo"${r[5]&&r[4].toLowerCase()!==r[5]?` title="у таблиці: ${esc(r[4])}"`:""}>${esc((r[5]||r[4]||"—").toUpperCase())}</span></td>`+
+        `<td><span class="chip geo"${r[5]&&r[4].toLowerCase()!==r[5]?` title="у назві кампанії: ${esc(r[4])}"`:""}>${esc((r[5]||r[4]||"—").toUpperCase())}</span></td>`+
         `<td><span class="vd ${v.c}" title="${esc(v.d)}">${v.t}</span></td>`+
-        `<td class="mono" style="font-size:11.5px;color:var(--dim)">${esc(r[7]||"—")}</td>`+
+        `<td>${histBar(r)}</td>`+
+        `<td class="mono" style="font-size:11.5px;color:var(--dim)">${esc(r[7]||"—")}`+
+          (title?`<div class="dim-ttl" title="${esc(title)}">${esc(title)}</div>`:"")+
+        `</td>`+
         `<td class="r mono">${r[9]}</td>`+
         `<td class="r mono" style="color:var(--faint)">${r[10]?(r[10]/1000).toFixed(1)+" с":"—"}</td>`+
         `<td style="color:var(--faint);font-size:12px">${esc(r[11]||"")}</td></tr>`);
@@ -2025,6 +2057,20 @@ function KT_boot(D){
     document.querySelectorAll("#tdsTbl .tdsrow").forEach(tr=>tr.onclick=()=>{
       const i=+tr.dataset.i; if(tdsOpen.has(i)) tdsOpen.delete(i); else tdsOpen.add(i); renderTds();
     });
+
+    // Журнал прогонів: видно, чи стає краще, і коли саме щось поламалось.
+    const rr=(TDS.runs||[]).slice(-8).reverse();
+    document.getElementById("tdsRuns").innerHTML = rr.length>1
+      ? `<div class="runs"><span style="font-size:11.5px;color:var(--faint)">Минулі прогони:</span>`+
+        rr.map(x=>{
+          const g=(x.stat.ok||0)+(x.stat.lander||0);
+          const w=(x.stat.mismatch||0)+(x.stat.challenge||0)+(x.stat.loop||0)+(x.stat.long||0);
+          const b=(x.stat.empty||0)+(x.stat.blocked||0)+(x.stat.http||0)+(x.stat.dead||0);
+          const d=new Date(x.at);
+          return `<span class="run" title="${esc(x.scope)} · ${x.ua==="desktop"?"десктоп":"мобільний"} · ${x.n} лінків">`+
+            `${d.toLocaleDateString("uk-UA",{day:"2-digit",month:"2-digit"})} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`+
+            ` <s class="o">${g}</s><s class="w">${w}</s><s class="b">${b}</s></span>`;
+        }).join("")+`</div>` : "";
 
     foot.innerHTML=`Показано ${fmtInt(view.length)} із ${fmtInt(rows.length)}. Клік по рядку — весь ланцюг редіректів. `+
       `Перевірка йде з резидентської IP країни з назви кампанії, з ${TDS.ua==="desktop"?"десктопного":"мобільного"} браузера.`+

@@ -19,3 +19,16 @@ export async function encryptData(jsonStr, password) {
   out.set(salt, 0); out.set(iv, salt.length); out.set(ct, salt.length + iv.length);
   return { b64: Buffer.from(out).toString("base64"), iter };
 }
+
+// Зворотне перетворення: потрібне перевірці ТДС, щоб підхопити минулий
+// результат і дописати історію, не втрачаючи того, що було до неї.
+export async function decryptData(b64, password) {
+  const raw = Buffer.from(String(b64).trim(), "base64");
+  const salt = raw.subarray(0, 16), iv = raw.subarray(16, 28), ct = raw.subarray(28);
+  const keyMat = await wc.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveKey"]);
+  const key = await wc.subtle.deriveKey(
+    { name: "PBKDF2", salt, iterations: KDF_ITER, hash: "SHA-256" },
+    keyMat, { name: "AES-GCM", length: 256 }, false, ["decrypt"]);
+  const plain = await wc.subtle.decrypt({ name: "AES-GCM", iv }, key, ct);
+  return JSON.parse(new TextDecoder().decode(plain));
+}
