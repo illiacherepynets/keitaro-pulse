@@ -337,6 +337,7 @@
     border:1px solid transparent;white-space:nowrap}
   .chip.geo{background:var(--info-bg);color:var(--info-ink)}
   .chip.slot{background:color-mix(in srgb,var(--s4) 12%,#fff);color:var(--s4)}
+  .chip.kt{background:color-mix(in srgb,var(--s2) 12%,#fff);color:var(--s2)}
   /* Смужка історії: чи падає лінк стабільно, чи це був разовий збій */
   .dim-ttl{font-family:inherit;font-size:11px;color:var(--faint);max-width:230px;
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px}
@@ -791,6 +792,7 @@ function KT_boot(D){
               <div><h2>Перевірка ТДС-лінків</h2><div class="psub" id="tdsSub"></div></div>
               <div class="tools">
                 <div class="seg alt" id="tdsFilt"><button data-f="bad">⚠ Проблемні</button><button data-f="all">Усі</button><button data-f="ok">Працюють</button></div>
+                <select class="pill" id="tdsTeam" title="Який інстанс Keitaro"></select>
                 <select class="pill" id="tdsGeo" title="Гео"></select>
                 <input class="search" id="tdsSearch" placeholder="кампанія, префікс, хост…">
                 <button class="mbtn primary" id="tdsRun" type="button">Перевірити</button>
@@ -1909,7 +1911,9 @@ function KT_boot(D){
       (pad<3?`<i></i>`.repeat(3-pad):"")+`</span>`;
   }
 
-  let TDS=null, tdsState="idle", tdsFilt="bad", tdsQ="", tdsGeo="all";
+  let TDS=null, tdsState="idle", tdsFilt="bad", tdsQ="", tdsGeo="all", tdsTeam="all";
+  // Що саме перепровірити, коли тиснуть «Перевірити цю кампанію»: {scope, label}
+  let tdsPreset=null;
   const tdsOpen=new Set();
 
   async function loadTds(){
@@ -1992,7 +1996,20 @@ function KT_boot(D){
         `<span class="vd ${TDSV[v].c}">${TDSV[v].t}</span> ${fmtInt(TDS.stat[v])}</span>`).join("")}</div>`;
 
     // Гео-фільтр будуємо з того, що реально є в результатах
-    const geos=[...new Set(rows.map(r=>r[4]).filter(Boolean))].sort();
+    const teams=TDS.tabs||[];
+    const tsel=document.getElementById("tdsTeam");
+    if(tsel.dataset.built!=="1"){
+      // Коли Keitaro один, вибирати нема з чого — ховаємо, щоб не плодити порожні контроли.
+      if(teams.length<2){ tsel.style.display="none"; }
+      else {
+        tsel.innerHTML=`<option value="all">Keitaro: усі</option>`+
+          teams.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join("");
+        tsel.value=tdsTeam;
+      }
+      tsel.dataset.built="1";
+    }
+
+    const geos=[...new Set(rows.map(r=>r[4]).filter(g=>g&&g!=="—"))].sort();
     const sel=document.getElementById("tdsGeo");
     if(sel.dataset.built!=="1"||sel.options.length!==geos.length+1){
       sel.innerHTML=`<option value="all">Гео: усі</option>`+geos.map(g=>`<option value="${esc(g)}">${esc(g)}</option>`).join("");
@@ -2010,6 +2027,7 @@ function KT_boot(D){
       const moot = r[6]==="skip"||r[6]==="proxy";
       if(tdsFilt==="ok"&&!fine) return false;
       if(tdsFilt==="bad"&&(fine||moot)) return false;
+      if(tdsTeam!=="all"&&(TDS.tabs||[])[r[0]]!==tdsTeam) return false;
       if(tdsGeo!=="all"&&r[4]!==tdsGeo) return false;
       if(q&&!((r[2]+" "+r[3]+" "+r[7]+" "+r[12]+" "+(r[14]||"")).toLowerCase().includes(q))) return false;
       return true;
@@ -2017,8 +2035,13 @@ function KT_boot(D){
     // найболючіше зверху: спершу зламане, тоді «не туди», тоді решта
     view.sort((a,b)=>TDS_ORDER.indexOf(a.r[6])-TDS_ORDER.indexOf(b.r[6])||String(a.r[2]).localeCompare(b.r[2],"uk"));
 
-    document.getElementById("tdsSub").textContent=
-      `${TDS.scope==="all"?"усі команди":"обране: "+TDS.scope} · ${TDS.tabs.length} ${plural(TDS.tabs.length,["команда","команди","команд"])}`
+    // Перше питання до такої таблиці — «а це взагалі яка Keitaro?». Тому
+    // інстанси названі поіменно, а не пораховані.
+    const who = TDS.scope==="all"
+      ? `Keitaro: ${teams.join(", ")||"—"}`
+      : /^camp:/i.test(TDS.scope) ? `одна кампанія · Keitaro: ${teams.join(", ")||"—"}`
+      : `обране: ${TDS.scope}`;
+    document.getElementById("tdsSub").textContent = who
       + (TDS.offerHosts?` · довідник оферів: ${fmtInt(TDS.offerHosts)} ${plural(TDS.offerHosts,["хост","хости","хостів"])}`:"")
       + (slotRows?` · зі слотом: ${fmtInt(slotRows)}`:"");
 
@@ -2029,7 +2052,9 @@ function KT_boot(D){
       const v=TDSV[r[6]]||TDSV.skip, open=tdsOpen.has(i);
       const lastHop=(chains[i]||[]).slice(-1)[0], title=lastHop?lastHop[4]:"";
       html.push(`<tr class="tdsrow" tabindex="0" role="button" data-key="1" data-i="${i}">`+
-        `<td><b>${esc(r[2]||"—")}</b>`+
+        `<td>`+
+          (teams.length>1?`<span class="chip kt" title="інстанс Keitaro">${esc(teams[r[0]]||"?")}</span> `:"")+
+          `<b>${esc(r[2]||"—")}</b>`+
           (r[14]?` <span class="chip slot" title="${esc(TDS.slotParam||"slot")}=${esc(r[14])} — окремий сайт призначення">${esc(TDS.slotParam||"slot")} ${esc(r[14])}</span>`:"")+
           (r[1]?` <span class="chip" title="кліків у кампанії за ${TDS.trafficDays||7} дн">${fmtInt(r[1])}</span>`:"")+
         `</td>`+
@@ -2058,12 +2083,20 @@ function KT_boot(D){
               `${c[5]?`<div class="ti" style="color:var(--crit-ink)">${esc(c[5])}</div>`:""}</span></li>`;
           }).join(""):`<li><span class="hop"></span><span class="st"></span><span class="ti">Запит навіть не пішов.</span></li>`)+
           `</ul>`+
-          (r[8]?`<div class="hint" style="margin:0">Домен трекера — <span class="mono">${esc(r[8])}</span>. Робочий лінк має вивести за його межі, на хост із довідника оферів Keitaro.</div>`:"")+
+          `<div class="mrow" style="margin-top:10px">`+
+        `<button class="mbtn" type="button" data-camp="${esc(r[13])}" data-cname="${esc(r[2]||"")}">↻ Перевірити цю кампанію</button>`+
+        `<span class="mnote">усі її слоти, з гео ${esc((r[5]||r[4]||"").toUpperCase())}</span></div>`+
+      (r[8]?`<div class="hint" style="margin:0">Домен трекера — <span class="mono">${esc(r[8])}</span>. Робочий лінк має вивести за його межі, на хост із довідника оферів Keitaro.</div>`:"")+
           `</td></tr>`);
       }
     }
     html.push("</tbody>");
     document.getElementById("tdsTbl").innerHTML=html.join("");
+    document.querySelectorAll("#tdsTbl [data-camp]").forEach(b=>b.onclick=(e)=>{
+      e.stopPropagation();
+      tdsPreset={scope:"camp:"+b.dataset.camp, label:"Лише кампанія: "+b.dataset.cname};
+      modalKind="tds"; openModal();
+    });
     document.querySelectorAll("#tdsTbl .tdsrow").forEach(tr=>tr.onclick=()=>{
       const i=+tr.dataset.i; if(tdsOpen.has(i)) tdsOpen.delete(i); else tdsOpen.add(i); renderTds();
     });
@@ -2094,6 +2127,7 @@ function KT_boot(D){
     tdsOpen.clear(); renderTds();
   });
   document.getElementById("tdsGeo").addEventListener("change",e=>{ tdsGeo=e.target.value; tdsOpen.clear(); renderTds(); });
+  document.getElementById("tdsTeam").addEventListener("change",e=>{ tdsTeam=e.target.value; tdsOpen.clear(); renderTds(); });
   let tdsTimer=null;
   document.getElementById("tdsSearch").addEventListener("input",e=>{
     tdsQ=e.target.value.trim(); clearTimeout(tdsTimer); tdsTimer=setTimeout(renderTds,180); });
@@ -2147,7 +2181,7 @@ function KT_boot(D){
     document.getElementById("mTitle").textContent = modalKind==="tds"?"Перевірити ТДС-лінки":"Оновити дані";
     (modalKind==="tds"?drawTdsModal:drawModal)();
     setTimeout(()=>{const i=mBody.querySelector("input,button,a,select");if(i)i.focus();},30); };
-  const closeModal=()=>{ if(!polling) modal.hidden=true; };
+  const closeModal=()=>{ if(!polling){ modal.hidden=true; tdsPreset=null; } };
   document.getElementById("mClose").onclick=closeModal;
   modal.addEventListener("click",e=>{ if(e.target===modal) closeModal(); });
   addEventListener("keydown",e=>{ if(e.key==="Escape"&&!modal.hidden) closeModal(); });
@@ -2243,21 +2277,30 @@ function KT_boot(D){
     modalKind="build";
     if(tokGet()){ openModal(); startBuild(); } else openModal();
   };
-  document.getElementById("tdsRun").onclick=()=>{ modalKind="tds"; openModal(); };
+  document.getElementById("tdsRun").onclick=()=>{ tdsPreset=null; modalKind="tds"; openModal(); };
 
   const tdsWfUrl=()=>{ const r=repoInfo();
     return r?`https://github.com/${r.owner}/${r.repo}/actions/workflows/tds.yml`:"https://github.com"; };
 
   function drawTdsModal(){
     const has=!!tokGet();
-    const geos=TDS&&TDS.rows?[...new Set(TDS.rows.map(r=>r[4]).filter(Boolean))].sort():[];
+    const geos=TDS&&TDS.rows?[...new Set(TDS.rows.map(r=>r[4]).filter(g=>g&&g!=="—"))].sort():[];
+    const teams=(TDS&&TDS.tabs)||[];
     mBody.innerHTML=
       `<p>Перевірка бере кампанії з Keitaro, які мали трафік за останній тиждень, і відкриває кожну `+
       `з резидентської IP <b>тієї країни, що вказана в назві кампанії</b>, ідучи по всьому ланцюгу `+
       `редіректів до фінальної сторінки. Прогін на кілька сотень лінків — кілька хвилин.</p>`+
       `<p class="mnote">Резидентський трафік платний, тому це не крутиться щоночі. Якщо треба швидко — звузь до одного гео.</p>`+
-      `<div class="mrow"><select class="pill" id="tScope"><option value="all">Усі гео</option>`+
-        geos.map(g=>`<option value="${esc(g)}">лише ${esc(g)}</option>`).join("")+`</select>`+
+      `<div class="mrow"><select class="pill" id="tScope">`+
+        // Пресет зверху й обраний: людина натиснула «перевірити цю кампанію»
+        // саме тому, що хоче її, а не щоб шукати в списку.
+        (tdsPreset?`<option value="${esc(tdsPreset.scope)}" selected>${esc(tdsPreset.label)}</option>`:"")+
+        `<option value="all"${tdsPreset?"":" selected"}>Усе: всі Keitaro й усі гео</option>`+
+        (teams.length>1?`<optgroup label="Окремий Keitaro">`+
+          teams.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join("")+`</optgroup>`:"")+
+        (geos.length?`<optgroup label="Окреме гео">`+
+          geos.map(g=>`<option value="${esc(g)}">${esc(g)}</option>`).join("")+`</optgroup>`:"")+
+      `</select>`+
       `<select class="pill" id="tUa"><option value="mobile">мобільний</option><option value="desktop">десктоп</option></select>`+
       `<select class="pill" id="tLimit"><option value="400">до 400 лінків</option><option value="100">до 100</option><option value="50">до 50</option></select></div>`+
       `<div class="mrow"><a class="mbtn" href="${tdsWfUrl()}" target="_blank" rel="noopener noreferrer">Відкрити GitHub Actions ↗</a>`+

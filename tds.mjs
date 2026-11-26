@@ -97,17 +97,31 @@ function ktClient(url, key) {
   };
 }
 
-// scope: "all" | гео через кому ("IT,DK") | назва команди | і те, і те.
+// scope розуміє чотири речі, через кому й у будь-якому поєднанні:
+//   all            — усе
+//   IT, DK         — гео (дві літери)
+//   Italy, Asia    — назва команди, тобто конкретний інстанс Keitaro
+//   camp:1234      — конкретна кампанія за id
+// Коли названо кампанії, фільтр «мав трафік» не застосовується: якщо людина
+// свідомо вибрала кампанію, вона хоче бачити саме її, а не пояснення, чому
+// та випала з вибірки.
 function scopeParts(scope) {
   const t = String(scope || "all").split(",").map((x) => x.trim()).filter(Boolean);
-  const all = !t.length || t.length === 1 && t[0].toLowerCase() === "all";
+  const camps = new Set();
+  const rest = [];
+  for (const x of t) {
+    const m = /^camp:(\d+)$/i.exec(x);
+    if (m) camps.add(m[1]); else rest.push(x);
+  }
+  const all = !camps.size && (!rest.length || (rest.length === 1 && rest[0].toLowerCase() === "all"));
   return {
-    all,
-    geos: t.filter((x) => /^[A-Za-z]{2}$/.test(x)).map((x) => x.toUpperCase()),
-    names: t.filter((x) => !/^[A-Za-z]{2}$/.test(x) && x.toLowerCase() !== "all").map((x) => x.toLowerCase()),
+    all, camps,
+    geos: rest.filter((x) => /^[A-Za-z]{2}$/.test(x)).map((x) => x.toUpperCase()),
+    names: rest.filter((x) => !/^[A-Za-z]{2}$/.test(x) && x.toLowerCase() !== "all").map((x) => x.toLowerCase()),
   };
 }
-const wantTeam = (name, sp) => sp.all || !sp.names.length || sp.names.includes(String(name).toLowerCase());
+const wantTeam = (name, sp) => sp.all || sp.camps.size || !sp.names.length
+  || sp.names.includes(String(name).toLowerCase());
 const wantGeo  = (geo,  sp) => sp.all || !sp.geos.length  || sp.geos.includes(geo);
 
 // Які слоти живуть у цій кампанії під це гео. Беремо з потоків, а не вгадуємо:
@@ -165,9 +179,12 @@ async function loadLinks(scope, limit) {
     const rows = camps
       .filter((c) => c.state === "active" && c.alias && /^https?:\/\//i.test(String(c.domain || "")))
       .map((c) => ({ c, kt, team: T.name, clicks: clicks.get(String(c.id)) || 0, ...parseCampaign(c.name) }))
-      .filter((r) => r.clicks > 0 && wantGeo(r.geo, sp));
+      .filter((r) => sp.camps.size ? sp.camps.has(String(r.c.id))
+                                   : (r.clicks > 0 && wantGeo(r.geo, sp)));
     cand.push(...rows);
-    log(`[${T.name}] активних ${camps.length} · із трафіком за ${TRAFFIC_DAYS} дн ${rows.length} · оферів ${offers.length}`);
+    log(sp.camps.size
+      ? `[${T.name}] активних ${camps.length} · вибрано кампаній ${rows.length} · оферів ${offers.length}`
+      : `[${T.name}] активних ${camps.length} · із трафіком за ${TRAFFIC_DAYS} дн ${rows.length} · оферів ${offers.length}`);
   }
   cand.sort((a, b) => b.clicks - a.clicks);
 
@@ -195,7 +212,11 @@ async function loadLinks(scope, limit) {
   }
   log(`Кампаній-кандидатів ${cand.length} · зі слотами ${withSlots} · без слотів ${noSlots} · лінків ${links.length}`);
 
-  if (!links.length && !sp.all) throw new Error(`під scope="${scope}" не знайшлось кампаній із трафіком`);
+  if (!links.length && !sp.all) {
+    throw new Error(sp.camps.size
+      ? `кампанію з scope="${scope}" не знайдено — можливо, вона не активна`
+      : `під scope="${scope}" не знайшлось кампаній із трафіком`);
+  }
   return { links, offerHosts };
 }
 

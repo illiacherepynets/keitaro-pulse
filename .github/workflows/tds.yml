@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       scope:
-        description: 'Що перевіряти: all · гео (IT) · кілька гео (IT,DK) · назва команди'
+        description: 'Що перевіряти: all · гео (IT, IT,DK) · назва команди (Italy) · кампанія (camp:1234) · будь-яке поєднання через кому'
         default: 'all'
       limit:
         description: 'Максимум лінків за прогін (страховка від зайвого трафіку)'
