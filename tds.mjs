@@ -445,7 +445,7 @@ async function probeKeitaro() {
   const API = String(T.url).replace(/\/+$/, "") + "/admin_api/v1";
   const headers = { "Api-Key": T.key, "Content-Type": "application/json" };
   const get = async (path) => {
-    const r = await request(API + path, { headers }, "GET " + path);
+    const r = await fetch(API + path, { headers, signal: AbortSignal.timeout(60_000) });
     if (!r.ok) return { err: r.status };
     const j = await r.json();
     return Array.isArray(j) ? j : (j.rows || j);
