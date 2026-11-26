@@ -17,6 +17,9 @@ on:
         type: choice
         options: [mobile, desktop]
         default: mobile
+      selftest:
+        description: 'Самоперевірка проксі замість лінків: список країн, напр. it,dk,es (таблиця не потрібна)'
+        default: ''
 
 permissions:
   contents: write     # треба, щоб покласти data/tds.enc назад у репозиторій
@@ -45,8 +48,10 @@ jobs:
           TDS_SCOPE: ${{ inputs.scope }}
           TDS_LIMIT: ${{ inputs.limit }}
           TDS_UA: ${{ inputs.ua }}
+          TDS_SELFTEST: ${{ inputs.selftest }}
         run: node tds.mjs
       - name: Зберегти результат
+        if: inputs.selftest == ''
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -57,6 +62,7 @@ jobs:
   publish:
     name: Перезібрати дашборд
     needs: check
+    if: inputs.selftest == ''
     runs-on: ubuntu-latest
     timeout-minutes: 25
     concurrency:

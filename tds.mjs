@@ -434,6 +434,37 @@ async function pool(items, n, fn) {
 
 const VERDICTS = ["ok", "mismatch", "blocked", "http", "dead", "loop", "proxy", "skip"];
 
+// Перевірка самого проксі, без таблиці. Потрібна, бо це єдиний шматок, який
+// неможливо прогнати локально: з пісочниці шлюз DataImpulse недосяжний.
+// Друкуємо країну й провайдера, але НЕ саму IP — у публічному лозі їй не місце.
+async function selfTest(proxy, ua) {
+  const ccs = (process.env.TDS_SELFTEST || "it").split(/[,\s]+/).map(c => c.trim().toLowerCase()).filter(Boolean);
+  log(`Самоперевірка проксі: ${ccs.length} ${ccs.length === 1 ? "країна" : "країн"}`);
+  let bad = 0;
+  for (const cc of ccs) {
+    const lang = LANG[cc.toUpperCase()] || "en-US,en;q=0.9";
+    try {
+      const r = await oneHop("https://ipinfo.io/json", cc, proxy, Math.floor(Math.random() * 1e9), ua, lang);
+      let j = {}; try { j = JSON.parse(r.body); } catch {}
+      const got = String(j.country || "?").toLowerCase();
+      const hit = got === cc;
+      if (!hit) bad++;
+      const isp = j.org ? " · " + String(j.org).replace(/^AS\d+\s*/, "").slice(0, 30) : "";
+      log(`  ${cc.toUpperCase()}: HTTP ${r.status} · вийшли з ${got.toUpperCase()}${isp} · ${r.ms} мс ${hit ? "✓" : "✗ не та країна"}`);
+    } catch (e) { bad++; log(`  ${cc.toUpperCase()}: ✗ ${hide(e.message)}`); }
+  }
+  // Окремо — ланцюг редіректів на справжньому TLS: локально це бачив лише
+  // фальшивий проксі на http, тут перевіряємо тунель + сертифікат + переходи.
+  try {
+    const r = await checkLink({ tab: "selftest", pos: "", brand: "", partner: "",
+      geoRaw: ccs[0].toUpperCase(), url: "https://httpbingo.org/redirect/3", ref: "", row: 0 }, proxy, ua);
+    log(`  ланцюг редіректів: ${r.verdict} · кроків ${r.chain.length}${r.note ? " · " + hide(r.note) : ""}`);
+  } catch (e) { log(`  ланцюг редіректів: не вдалось перевірити — ${hide(e.message)}`); }
+
+  if (bad) throw new Error(`${bad} з ${ccs.length} країн відповіли не так, як треба — перевір логін, ліміти й баланс DataImpulse`);
+  log("Проксі працює: виходимо саме з потрібних країн.");
+}
+
 async function main() {
   const t0 = Date.now();
   const scope = (process.env.TDS_SCOPE || "all").trim() || "all";
@@ -441,14 +472,16 @@ async function main() {
   const uaKind = (process.env.TDS_UA || "mobile").toLowerCase();
   const ua = uaKind === "desktop" ? UA_DESKTOP : UA_MOBILE;
 
+  const proxy = JSON.parse(process.env.KT_PROXY || "null");
+  if (!proxy || !proxy.host || !proxy.user) throw new Error("немає секрету KT_PROXY");
+  proxy.port = Number(proxy.port || 823);
+
+  if (process.env.TDS_SELFTEST) return selfTest(proxy, ua);
+
   let links = await loadLinks(scope);
   const total = links.length;
   if (links.length > limit) { log(`Лінків ${total}, ліміт ${limit} — беремо перші ${limit}`); links = links.slice(0, limit); }
   if (!links.length) throw new Error("не знайшов жодного ТДС-лінка");
-
-  const proxy = JSON.parse(process.env.KT_PROXY || "null");
-  if (!proxy || !proxy.host || !proxy.user) throw new Error("немає секрету KT_PROXY");
-  proxy.port = Number(proxy.port || 823);
 
   log(`Перевіряю ${links.length} лінків (${uaKind}, по ${CONCURRENCY} паралельно)…`);
   const res = await pool(links, CONCURRENCY, (l) => checkLink(l, proxy, ua));
