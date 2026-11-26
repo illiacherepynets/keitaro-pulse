@@ -72,6 +72,7 @@ const MAX_SLOTS   = 40;     // страховка від кампанії з с�
 const TZ = "Europe/Kyiv";
 const dayAgo = (n) => new Date(Date.now() - n * 864e5).toISOString().slice(0, 10);
 const num = (v) => { const n = Number(v); return isNaN(n) ? 0 : n; };
+const plural = (n, f) => f[(n % 100 > 4 && n % 100 < 20) ? 2 : [2, 0, 1, 1, 1, 2][Math.min(n % 10, 5)]];
 
 function ktClient(url, key) {
   const API = String(url).replace(/\/+$/, "") + "/admin_api/v1";
@@ -267,6 +268,7 @@ function httpOverSocket(sock, preData, { host, path, headers }) {
       if (buf.indexOf("\r\n\r\n") >= 0) finish(); else fail(new Error(e.code || e.message));
     });
     sock.on("data", (c) => {
+      BYTES_IN += c.length;
       buf = Buffer.concat([buf, c]);
       if (buf.length >= MAX_BODY + 8192) finish();
     });
@@ -470,6 +472,11 @@ function ccOf(raw, proxy) {
 // ── Прогін ──────────────────────────────────────────────────────────────────
 // Логи Actions публічні, а ТДС-лінки й бренди — ні. Тому в CI друкуємо лише
 // цифри: що саме зламалось, видно в дашборді, який і так під паролем.
+// Скільки резидентського трафіку з'їв прогін. Він платний за гігабайти, тож
+// без вимірювання будь-яка оцінка «а скільки коштуватимуть скріншоти» —
+// вгадування. Рахуємо все, що реально прийшло в сокет.
+let BYTES_IN = 0;
+
 const CI = !!process.env.CI;
 // Ховаємо адреси й хости, але НЕ сам текст помилки: інакше причина падіння
 // перетворюється на «***», і з логу неможливо зрозуміти, чого бракує.
@@ -671,7 +678,7 @@ async function main() {
     generated: new Date().toLocaleString("uk-UA", { timeZone: "Europe/Kyiv" }),
     scope, ua: uaKind, total, checked: links.length, stat, tabs, rows, chains,
     source: "keitaro", trafficDays: TRAFFIC_DAYS, offerHosts: offerHosts.size,
-    slotParam: SLOT_PARAM, hist, runs, histMax: HIST_MAX,
+    slotParam: SLOT_PARAM, hist, runs, histMax: HIST_MAX, bytes: BYTES_IN,
   };
 
   const outPath = join(__dir, "data", "tds.enc");
@@ -688,6 +695,9 @@ async function main() {
   const bad = links.length - stat.ok;
   // Розподіл довжини ланцюга — єдиний спосіб зрозуміти з публічного логу,
   // чи вистачає MAX_HOPS, не показуючи самих адрес.
+  const mb = BYTES_IN / 1024 / 1024;
+  log(`Трафік через проксі: ${mb.toFixed(1)} MB за ${links.length} ${plural(links.length, ["лінк", "лінки", "лінків"])}` +
+      ` · у середньому ${(BYTES_IN / Math.max(1, links.length) / 1024).toFixed(0)} KB на лінк`);
   const lens = chains.map((c) => c.length).sort((a, b) => a - b);
   const p = (q) => lens[Math.min(lens.length - 1, Math.floor(lens.length * q))] || 0;
   log(`Кроків у ланцюгу: медіана ${p(0.5)} · 90% ${p(0.9)} · максимум ${lens[lens.length - 1] || 0} (ліміт ${MAX_HOPS})`);
