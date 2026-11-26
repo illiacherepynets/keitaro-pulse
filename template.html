@@ -791,7 +791,7 @@ function KT_boot(D){
             <div class="phead">
               <div><h2>Перевірка ТДС-лінків</h2><div class="psub" id="tdsSub"></div></div>
               <div class="tools">
-                <div class="seg alt" id="tdsFilt"><button data-f="bad">⚠ Проблемні</button><button data-f="all">Усі</button><button data-f="ok">Працюють</button></div>
+                <div class="seg alt" id="tdsFilt"><button data-f="bad" title="Те, що справді зламано: порожня сторінка, блок, помилка сервера, не той хост">⚠ Проблемні</button><button data-f="warn" title="Капча й петля: живий браузер їх зазвичай проходить, тож у проблемні вони не йдуть">Капчі</button><button data-f="ok">Все гуд</button><button data-f="all">Усі</button></div>
                 <select class="pill" id="tdsTeam" title="Який інстанс Keitaro"></select>
                 <select class="pill" id="tdsGeo" title="Гео"></select>
                 <input class="search" id="tdsSearch" placeholder="кампанія, префікс, хост…">
@@ -1884,14 +1884,14 @@ function KT_boot(D){
   const TDSV = {
     ok:       {t:"працює",        c:"ok",   d:"юзер вийшов із трекера на офер"},
     lander:   {t:"ленд",          c:"ok",   d:"сторінка на домені трекера — локальний ленд, далі юзер іде кліком"},
-    mismatch: {t:"не туди",       c:"warn", d:"вийшли на хост, якого немає серед оферів Keitaro"},
+    mismatch: {t:"не туди",       c:"bad",  d:"вийшли на хост, якого немає серед оферів Keitaro"},
     empty:    {t:"порожньо",      c:"bad",  d:"трекер нічого не віддав: під це гео й девайс не підібрався жоден потік. Перевірка ходить без реферера й міток — якщо потік вимагає їх, у живому трафіку може бути все гаразд"},
     challenge:{t:"капча",         c:"warn", d:"сторінка просить довести, що ти людина — живий юзер зазвичай проходить, бот ні"},
     blocked:  {t:"блокує",        c:"bad",  d:"глухий блок: далі не пустять ні за яких умов"},
     http:     {t:"помилка",       c:"bad",  d:"сервер віддав помилку"},
     dead:     {t:"не відкрилась", c:"bad",  d:"не достукались до хоста"},
-    loop:     {t:"петля",         c:"warn", d:"редіректи ходять по колу — лінк зациклений"},
-    long:     {t:"задовгий",      c:"warn", d:"ланцюг не завершився за відведені кроки: або дуже довгий маршрут, або нескінченний"},
+    loop:     {t:"петля",         c:"warn", d:"редіректи ходять по колу. Саме по собі це не поломка: частина трекерів так ганяє перевірку, а живий браузер проходить"},
+    long:     {t:"задовгий",      c:"bad",  d:"ланцюг не завершився за відведені кроки: або дуже довгий маршрут, або нескінченний"},
     proxy:    {t:"проксі",        c:"mute", d:"не вина лінка: не вийшло вийти з цієї країни"},
     skip:     {t:"пропущено",     c:"mute", d:"у назві кампанії не знайшлось гео"},
   };
@@ -1906,7 +1906,9 @@ function KT_boot(D){
     return (m&&TEAM_FIX[+m[1]-1])||String(v||"");
   };
 
-  const TDS_ORDER = ["empty","blocked","dead","http","mismatch","challenge","loop","long","lander","ok","proxy","skip"];
+  // Порядок задає і сортування таблиці, і порядок у легенді: спершу зламане,
+  // далі капча з петлею, тоді робоче, і наприкінці те, що не перевірялось.
+  const TDS_ORDER = ["empty","blocked","dead","http","mismatch","long","challenge","loop","lander","ok","proxy","skip"];
   const TDSC = {ok:"var(--good)",bad:"var(--crit)",warn:"var(--warn)",mute:"var(--border-strong)"};
 
 
@@ -2057,7 +2059,8 @@ function KT_boot(D){
     const slotRows=rows.filter(r=>r[14]).length;
     const skipN=TDS.stat.skip||0, proxyN=TDS.stat.proxy||0;
     const checkedN=rows.length-skipN-proxyN;
-    const okN=(TDS.stat.ok||0)+(TDS.stat.lander||0), bad=checkedN-okN;
+    const cnt=(c)=>TDS_ORDER.filter(v=>(TDSV[v]||{}).c===c).reduce((n,v)=>n+(TDS.stat[v]||0),0);
+    const okN=cnt("ok"), bad=cnt("bad"), warnN=cnt("warn");
     const when=new Date(TDS.checkedAt);
     const ageH=(Date.now()-when.getTime())/3600e3;
 
@@ -2067,7 +2070,8 @@ function KT_boot(D){
       {lbl:"Доходять до сторінки",v:fmtInt(okN),c:okN?"var(--good)":"var(--crit)",
        sub:checkedN?`${(okN/checkedN*100).toFixed(0)}% перевірених`:""},
       {lbl:"Потребують уваги",v:fmtInt(bad),c:bad?"var(--crit)":"var(--good)",
-       sub:bad?"є що скинути афіліату":"усе чисто"},
+       sub:bad?(warnN?`є що скинути афіліату · ще ${fmtInt(warnN)} під капчею`:"є що скинути афіліату")
+              :(warnN?`зламаного немає · ${fmtInt(warnN)} під капчею`:"усе чисто")},
       {lbl:"Коли перевіряли",v:fmtAge(Date.now()-when.getTime()),
        c:ageH>24*7?"var(--warn)":"var(--dim)",
        sub:`${TDS.generated||""} · ${TDS.ua==="desktop"?"десктоп":"мобільний"}`},
@@ -2076,7 +2080,7 @@ function KT_boot(D){
 
     // Смуга-розподіл: одразу видно співвідношення, не читаючи таблицю.
     const present=TDS_ORDER.filter(v=>TDS.stat[v]>0);
-    const grp=[["bad","зламані"],["warn","під питанням"],["ok","доходять"],["mute","не перевірені"]]
+    const grp=[["bad","проблемні"],["warn","капча чи петля"],["ok","все гуд"],["mute","не перевірені"]]
       .map(([c,t])=>[c,t,present.filter(v=>TDSV[v].c===c).reduce((n,v)=>n+TDS.stat[v],0)])
       .filter(g=>g[2]>0);
     document.getElementById("tdsDist").innerHTML=
@@ -2110,13 +2114,14 @@ function KT_boot(D){
     let view=rows.map((r,i)=>({r,i})).filter(({r})=>{
       // «skip» — це кампанія без гео в назві, а не зламаний лінк: у проблемні
       // вона не йде, інакше список тоне в тому, що нічого не означає.
-      // «skip» — кампанія без гео в назві, «proxy» — не вийшло вийти з країни.
-      // Ні те, ні те не є поломкою лінка, тож у «проблемні» вони не йдуть:
-      // інакше список тоне в тому, що нічого не означає.
-      const fine = r[6]==="ok"||r[6]==="lander";
-      const moot = r[6]==="skip"||r[6]==="proxy";
-      if(tdsFilt==="ok"&&!fine) return false;
-      if(tdsFilt==="bad"&&(fine||moot)) return false;
+      // Кошик рядка — це колір його вердикту, одне джерело правди:
+      //   bad  — зламано, це і є «проблемні»
+      //   warn — капча й петля: живий браузер їх зазвичай проходить, тож
+      //          у «проблемні» вони не йдуть і не роздувають список
+      //   ok   — дійшли куди треба
+      //   mute — перевірити не вийшло (немає гео, не дав проксі)
+      const c=(TDSV[r[6]]||TDSV.skip).c;
+      if(tdsFilt!=="all"&&c!==tdsFilt) return false;
       if(tdsTeam!=="all"&&(TDS.tabs||[])[r[0]]!==tdsTeam) return false;
       if(tdsGeo!=="all"&&r[4]!==tdsGeo) return false;
       if(q&&!((r[2]+" "+r[3]+" "+r[7]+" "+r[12]+" "+(r[14]||"")).toLowerCase().includes(q))) return false;

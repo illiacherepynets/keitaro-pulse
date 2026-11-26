@@ -538,8 +538,10 @@ const VERDICTS = ["ok", "lander", "mismatch", "empty", "challenge", "blocked", "
 
 // Три стани для історії: добре / під питанням / зламано. Детальніший вердикт
 // лишається в рядку, а смужка історії має читатись з одного погляду.
-const BUCKET = { ok: "o", lander: "o", mismatch: "w", challenge: "w", loop: "w", long: "w",
-                 empty: "b", blocked: "b", http: "b", dead: "b" };
+// Три стани для історії. Капча й петля — не поломка: живий браузер їх
+// зазвичай проходить, тому вони окремим кольором, а не червоним.
+const BUCKET = { ok: "o", lander: "o", challenge: "w", loop: "w",
+                 mismatch: "b", long: "b", empty: "b", blocked: "b", http: "b", dead: "b" };
 const HIST_MAX = 12;
 
 // Разовий зонд: що саме Keitaro знає про кампанії й домени. Потрібен, бо
