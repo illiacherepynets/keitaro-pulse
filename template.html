@@ -1917,7 +1917,14 @@ function KT_boot(D){
     try{
       let pw=null; try{ pw=sessionStorage.getItem("kt_pw"); }catch(_){}
       if(!pw) throw new Error("немає пароля в цій вкладці — перезайди");
-      TDS=await window.__ktDec(window.KT_TDS, pw);
+      // Малий блоб вшитий у сторінку, великий лежить окремим файлом поруч.
+      let blob=window.KT_TDS;
+      if(!blob&&window.KT_TDS_URL){
+        const res=await fetch(window.KT_TDS_URL,{cache:"no-store"});
+        if(!res.ok) throw new Error(`не вдалось завантажити дані (${res.status})`);
+        blob=(await res.text()).trim();
+      }
+      TDS=await window.__ktDec(blob, pw);
       tdsState="ready";
     }catch(e){ tdsState="err"; TDS={err:String(e.message||e)}; }
     renderTds();
@@ -1934,7 +1941,7 @@ function KT_boot(D){
 
   function renderTds(){
     const foot=document.getElementById("tdsFoot");
-    if(!window.KT_TDS){
+    if(!window.KT_TDS&&!window.KT_TDS_URL){
       return tdsInfo(
         `<div style="font-size:13px;color:var(--dim);line-height:1.7">`+
         `<b style="color:var(--fg)">Перевірки ще не було.</b><br>`+
@@ -2039,6 +2046,9 @@ function KT_boot(D){
         const ch=chains[i]||[];
         html.push(`<tr><td colspan="8" style="background:var(--bg2);padding:10px 14px">`+
           `<div style="font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--faint);font-weight:600;margin-bottom:4px">Куди вів лінк</div>`+
+          // У робочих лінків зберігається лише останній крок: повний ланцюг
+          // майже ніколи не відкривають, а на двох тисячах лінків він важить утричі більше.
+          (ch.length&&ch.length<r[9]?`<div class="hint" style="margin:0 0 6px">Показано останній крок із ${r[9]}. Повний ланцюг зберігається для проблемних лінків.</div>`:"")+
           `<ul class="chain">`+
           (ch.length?ch.map((c,k)=>{
             const st=c[1], cls=st?("s"+String(st)[0]):"s0";

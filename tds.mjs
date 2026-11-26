@@ -38,7 +38,9 @@ const log = (...a) => console.log("•", ...a);
 const MAX_HOPS     = 15;      // ланцюг трекер → афка → бренд → регіон буває довгим
 const HOP_TIMEOUT  = 20_000;
 const MAX_BODY     = 48 * 1024;  // більше й не треба: шукаємо редірект і сліди блоку
-const CONCURRENCY  = 6;       // не душимо ні проксі, ні цільові сайти
+// Скільки лінків перевіряємо одночасно. Більше — швидше, але DataImpulse має
+// свій ліміт потоків і відповідає 407 THREADS_EXHAUSTED, коли його перебрати.
+const CONCURRENCY  = Math.max(1, Math.min(40, Number(process.env.TDS_THREADS || 10)));
 const CHAIN_URL_MAX = 300;
 
 // ── гео → мова, щоб запит не виглядав чужим у своїй же країні ────────────────
@@ -481,7 +483,7 @@ function ccOf(raw, proxy) {
 // Скільки резидентського трафіку з'їв прогін. Він платний за гігабайти, тож
 // без вимірювання будь-яка оцінка «а скільки коштуватимуть скріншоти» —
 // вгадування. Рахуємо все, що реально прийшло в сокет.
-let BYTES_IN = 0;
+let BYTES_IN = 0, THREADS_HIT = 0;
 
 const CI = !!process.env.CI;
 // Ховаємо адреси й хости, але НЕ сам текст помилки: інакше причина падіння
@@ -502,6 +504,7 @@ async function pool(items, n, fn) {
       if (k >= items.length) return;
       try { out[k] = await fn(items[k], k); }
       catch (e) { out[k] = { verdict: "dead", note: String(e.message || e), chain: [] }; }
+      if (/THREADS?_EXHAUSTED/i.test(out[k]?.note || "")) THREADS_HIT++;
       if (++done % 25 === 0 || done === items.length) log(`  … ${done}/${items.length}`);
     }
   }));
@@ -670,8 +673,13 @@ async function main() {
       r.verdict, r.finalHost || "", r.refHost || "", (r.chain || []).length,
       r.ms || 0, r.note || "", l.url.slice(0, CHAIN_URL_MAX), l.row, l.slot || ""]);
     // індекс 13 = id кампанії, 14 = слот: разом вони й дають ключ історії
-    chains.push((r.chain || []).map((c) => [String(c.url).slice(0, CHAIN_URL_MAX),
-      c.status, c.via || "", c.ms || 0, (c.title || "").slice(0, 90), c.note || ""]));
+    // Повний ланцюг тримаємо лише там, де його реально відкривають. У робочих
+    // лінків лишаємо останній крок: видно, де опинились і що за сторінка.
+    // На двох тисячах лінків це різниця між ~1,7 МБ і ~0,6 МБ даних.
+    const hops = (r.chain || []).map((c) => [String(c.url).slice(0, CHAIN_URL_MAX),
+      c.status, c.via || "", c.ms || 0, (c.title || "").slice(0, 90), c.note || ""]);
+    const full = r.verdict !== "ok" && r.verdict !== "lander";
+    chains.push(full ? hops : hops.slice(-1));
     const key = `${l.row}|${l.slot || ""}`;
     const mark = BUCKET[r.verdict];
     if (mark) hist[key] = ((hist[key] || "") + mark).slice(-HIST_MAX);
@@ -701,6 +709,7 @@ async function main() {
   const bad = links.length - stat.ok;
   // Розподіл довжини ланцюга — єдиний спосіб зрозуміти з публічного логу,
   // чи вистачає MAX_HOPS, не показуючи самих адрес.
+  if (THREADS_HIT) log(`⚠ проксі ${THREADS_HIT} разів відмовив через ліміт потоків — зменш TDS_THREADS (зараз ${CONCURRENCY})`);
   const mb = BYTES_IN / 1024 / 1024;
   log(`Трафік через проксі: ${mb.toFixed(1)} MB за ${links.length} ${plural(links.length, ["лінк", "лінки", "лінків"])}` +
       ` · у середньому ${(BYTES_IN / Math.max(1, links.length) / 1024).toFixed(0)} KB на лінк`);

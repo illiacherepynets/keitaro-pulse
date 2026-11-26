@@ -378,7 +378,7 @@ async function main() {
   // Результати перевірки ТДС лежать окремим зашифрованим файлом: їх пише інший
   // воркфлоу і в інший час, тож збірка просто проносить блоб у сторінку як є —
   // розшифрує його браузер тим самим паролем.
-  let tdsBlob = "";
+  let tdsBlob = "", tdsSideFile = "";
   try {
     tdsBlob = (await readFile(join(__dir, "data", "tds.enc"), "utf8")).trim();
     log(`ТДС: підхопив минулу перевірку (${(tdsBlob.length / 1024).toFixed(0)} KB)`);
@@ -389,8 +389,20 @@ async function main() {
   let inject;
   if (PASSWORD) {
     const { b64, iter } = await encryptData(jsonStr, PASSWORD);
-    inject = `window.KT_ENC=${JSON.stringify(b64)};window.KT_KDF={iter:${iter}};`
-      + (tdsBlob ? `window.KT_TDS=${JSON.stringify(tdsBlob)};` : "");
+    // Малий блоб ТДС вшиваємо в сторінку — так дашборд працює і з диска.
+    // Великий (а на двох тисячах лінків це сотні кілобайт) кладемо поруч
+    // окремим файлом: сторінка лишається легкою, а дані вантажаться лише
+    // тоді, коли хтось відкриє вкладку.
+    const TDS_INLINE_MAX = Number(process.env.KT_TDS_INLINE_MAX || 800_000);
+    let tdsInject = "";
+    if (tdsBlob && tdsBlob.length <= TDS_INLINE_MAX) {
+      tdsInject = `window.KT_TDS=${JSON.stringify(tdsBlob)};`;
+    } else if (tdsBlob) {
+      tdsInject = `window.KT_TDS_URL="tds.enc";`;
+      tdsSideFile = tdsBlob;
+      log(`ТДС: ${(tdsBlob.length / 1024).toFixed(0)} KB — кладу окремим файлом поруч зі сторінкою`);
+    }
+    inject = `window.KT_ENC=${JSON.stringify(b64)};window.KT_KDF={iter:${iter}};` + tdsInject;
     log(`🔒 дані зашифровано паролем (${(b64.length / 1024 / 1024).toFixed(2)} MB base64)`);
   } else {
     inject = "window.KT_DATA = " + jsonStr + ";";
@@ -403,6 +415,7 @@ async function main() {
   const outPath = isAbsolute(outArg) ? outArg : resolve(process.cwd(), outArg);
   await mkdir(dirname(outPath), { recursive: true });
   await writeFile(outPath, html, "utf8");
+  if (tdsSideFile) await writeFile(join(dirname(outPath), "tds.enc"), tdsSideFile, "utf8");
 
   const mb = (Buffer.byteLength(html) / 1024 / 1024).toFixed(2);
   log(`Команд: ${teams.length} · кампаній: ${camps.length} · брендів: ${offers.length} · днів: ${days.length}`);
