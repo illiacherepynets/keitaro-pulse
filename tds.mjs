@@ -375,17 +375,21 @@ function nextUrl(r, cur) {
 function abs(href, base) { try { return new URL(href, base).toString(); } catch { return null; } }
 
 // Сторінка-челендж: юзера не відрізали, а попросили довести, що він людина.
-const CHALLENGE_SIGN = [
-  /just a moment/i, /cf-browser-verification/i, /checking your browser/i,
-  /enable javascript and cookies to continue/i, /challenge-platform/i,
-];
+// Шукати ці рядки деінде в тілі НЕ можна: Cloudflare вставляє свій скрипт
+// /cdn-cgi/challenge-platform/ і в цілком здорові сторінки, для скорингу
+// ботів. Перша версія через це перефарбувала 29 робочих лінків у «капчу».
+// Тому: або це написано в <title>, або сервер відповів 403/503.
+const CHALLENGE_TITLE = /just a moment|checking your browser|attention required|один момент/i;
+const CHALLENGE_BODY  = /cf-browser-verification|challenge-platform|enable javascript and cookies to continue/i;
+const CHALLENGE_CODE  = new Set([403, 503]);
 // Глухий блок: далі не пустять ні за яких умов.
 const BLOCK_SIGN = [
   /attention required/i, /access denied/i, /request blocked/i, /403 forbidden/i,
   /sorry, you have been blocked/i, /not available in your country/i,
   /доступ (?:заборонено|ограничен)/i,
 ];
-const looksChallenge = (body) => CHALLENGE_SIGN.some((re) => re.test(body));
+const looksChallenge = (body, status, title) =>
+  CHALLENGE_TITLE.test(title || "") || (CHALLENGE_CODE.has(status) && CHALLENGE_BODY.test(body));
 const looksBlocked = (body) => BLOCK_SIGN.some((re) => re.test(body));
 
 const hostOf = (u) => { try { return new URL(u).hostname.replace(/^www\./i, "").toLowerCase(); } catch { return ""; } };
@@ -410,8 +414,10 @@ async function checkLink(link, proxy, ua, offerHosts) {
       err = e; chain.push({ url: cur, status: 0, via: "—", ms: 0, note: e.message });
       break;
     }
-    chain.push({ url: cur, status: r.status, via: "", ms: r.ms, title: titleOf(r.body),
-                 len: r.body.length, blocked: looksBlocked(r.body), challenge: looksChallenge(r.body) });
+    const ttl = titleOf(r.body);
+    chain.push({ url: cur, status: r.status, via: "", ms: r.ms, title: ttl,
+                 len: r.body.length, blocked: looksBlocked(r.body),
+                 challenge: looksChallenge(r.body, r.status, ttl) });
     const nx = nextUrl(r, cur);
     if (!nx || !nx.url) break;
     chain[chain.length - 1].via = nx.via;
