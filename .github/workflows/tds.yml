@@ -61,11 +61,29 @@ jobs:
       - name: Зберегти результат
         if: inputs.selftest == '' && inputs.probe == ''
         run: |
+          # Прогін триває хвилинами, і за цей час у main цілком може лягти
+          # чужий коміт — тоді push відхиляється і результати тринадцяти
+          # хвилин роботи просто зникають. Саме так і сталось.
+          # Тому: відкладаємо свій файл, стаємо рівно на origin/main,
+          # повертаємо файл і пробуємо знову. Конфлікт неможливий — ми
+          # чіпаємо один файл і завжди беремо свіжу версію, свою.
+          set -euo pipefail
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/tds.enc
-          git diff --staged --quiet || git commit -m "ТДС: результати перевірки ${{ inputs.scope }}"
-          git push
+          cp data/tds.enc "$RUNNER_TEMP/tds.enc"
+          for i in 1 2 3 4 5; do
+            git fetch origin main
+            git reset --hard origin/main
+            mkdir -p data && cp "$RUNNER_TEMP/tds.enc" data/tds.enc
+            git add data/tds.enc
+            if git diff --staged --quiet; then echo "Результат не змінився — комітити нічого"; exit 0; fi
+            git commit -m "ТДС: результати перевірки ${{ inputs.scope }}"
+            if git push; then echo "Збережено з $i спроби"; exit 0; fi
+            echo "Push відхилено, спроба $i — хтось випередив, пробую ще"
+            sleep $((5 * i))
+          done
+          echo "::error::не вдалось зберегти результат за 5 спроб"
+          exit 1
 
   publish:
     name: Перезібрати дашборд
