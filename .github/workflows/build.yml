@@ -34,6 +34,19 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
+      # ТИМЧАСОВО: показати, які секрети взагалі видно цьому job.
+      # Друкуються лише імена й довжини — значення ні, і GitHub їх маскує.
+      - name: Які секрети видно
+        env:
+          ALL_SECRETS: ${{ toJSON(secrets) }}
+          ALL_VARS: ${{ toJSON(vars) }}
+        run: |
+          echo "::notice::секрети, видимі збірці:"
+          echo "$ALL_SECRETS" | jq -r 'to_entries[] | "   \(.key) — довжина \(.value|length)"' | sort
+          echo "::notice::змінні (vars):"
+          echo "$ALL_VARS" | jq -r 'to_entries[] | "   \(.key) — довжина \(.value|length)"' | sort
+        continue-on-error: true
+
       - name: Build dashboard
         env:
           KT_TEAMS: ${{ secrets.KT_TEAMS }}
