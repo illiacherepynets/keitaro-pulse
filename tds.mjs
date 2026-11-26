@@ -419,6 +419,29 @@ async function probeKeitaro() {
     const j = await r.json();
     return Array.isArray(j) ? j : (j.rows || j);
   };
+  // Потоки кампанії: саме в них має лежати розкладка по slot, бо кожен слот —
+  // це окремий сайт призначення. Без цього лінк «голий» і трекер справедливо
+  // не знає, куди вести.
+  const camps0 = await get("/campaigns");
+  const sample = (Array.isArray(camps0) ? camps0 : []).slice(0, 3);
+  for (const c of sample) {
+    for (const path of [`/campaigns/${c.id}/streams`, `/streams?campaign_id=${c.id}`]) {
+      const st = await get(path);
+      if (st.err) { log(`${path} → HTTP ${st.err}`); continue; }
+      const arr = Array.isArray(st) ? st : [st];
+      log(`${path.replace(/\d+/g, "N")} → ${arr.length} потоків`);
+      if (!arr.length) break;
+      log(`  поля: ${Object.keys(arr[0]).join(", ")}`);
+      arr.slice(0, 12).forEach((x, i) => {
+        const f = JSON.stringify(x.filters || []);
+        // показуємо лише структуру фільтрів: імена й числа, без значень-доменів
+        const masked = f.replace(/"(https?:\/\/[^"]*)"/g, '"URL"').slice(0, 300);
+        log(`  #${i + 1} type=${x.type} action=${x.action_type} pos=${x.position} weight=${x.weight} state=${x.state} filters=${masked}`);
+      });
+      break;
+    }
+  }
+
   for (const path of ["/campaigns", "/domains", "/offers"]) {
     const j = await get(path);
     if (j.err) { log(`${path} → HTTP ${j.err}`); continue; }
@@ -435,6 +458,10 @@ async function probeKeitaro() {
       const withDomain = arr.filter((c) => c.domain_id).length;
       const states = [...new Set(arr.map((c) => c.state))].join("/");
       log(`  з alias: ${withAlias} · з domain_id: ${withDomain} · стани: ${states}`);
+      log(`  приклад лінка, як його будує перевірка: ${arr.slice(0,3).map((c)=>{
+        const u = String(c.domain||"").replace(/\/+$/,"") + "/" + c.alias;
+        try { const x = new URL(u); return "https://***" + x.pathname; } catch { return "?"; }
+      }).join(" , ")}`);
       const linkish = Object.keys(arr[0]).filter((k) => /link|url|domain|alias/i.test(k));
       log(`  схоже на посилання: ${linkish.join(", ") || "нічого"}`);
       for (const k of linkish) {
