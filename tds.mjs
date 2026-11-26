@@ -142,6 +142,10 @@ async function loadLinks(scope, limit) {
   const sp = scopeParts(scope);
   const links = [], offerHosts = new Set();
 
+  // Спершу збираємо кандидатів з УСІХ команд і лише потім ріжемо за трафіком.
+  // Інакше перші команди вичерпують ліміт, а остання не потрапляє в перевірку
+  // взагалі — рівно це й сталось у першому прогоні зі слотами.
+  const cand = [];
   for (const T of teams) {
     if (!wantTeam(T.name, sp)) continue;
     const kt = ktClient(T.url, T.key);
@@ -157,36 +161,37 @@ async function loadLinks(scope, limit) {
 
     const rows = camps
       .filter((c) => c.state === "active" && c.alias && /^https?:\/\//i.test(String(c.domain || "")))
-      .map((c) => ({ c, clicks: clicks.get(String(c.id)) || 0, ...parseCampaign(c.name) }))
-      .filter((r) => r.clicks > 0 && wantGeo(r.geo, sp))
-      .sort((a, b) => b.clicks - a.clicks);
-
-    // Потоки тягнемо лише для тих кампаній, що реально підуть у перевірку:
-    // 1981 зайвий запит нікому не потрібен. Ідемо згори вниз за трафіком, поки
-    // не набереться ліміт лінків.
-    let withSlots = 0, noSlots = 0;
-    for (let i = 0; i < rows.length && links.length < limit; i += 10) {
-      const batch = rows.slice(i, i + 10);
-      const streams = await Promise.all(batch.map((r) =>
-        kt.get(`/campaigns/${r.c.id}/streams`).catch(() => [])));
-      batch.forEach((r, k) => {
-        const base = String(r.c.domain).replace(/\/+$/, "") + "/" + r.c.alias;
-        const slots = slotsFromStreams(streams[k], r.geo);
-        const common = { tab: T.name, clicks: r.clicks, brand: r.c.name, partner: r.prefix,
-                         geoRaw: r.geo, ref: "", row: r.c.id };
-        if (slots.length) {
-          withSlots++;
-          for (const sl of slots) links.push({ ...common, slot: sl,
-            url: `${base}?${SLOT_PARAM}=${encodeURIComponent(sl)}` });
-        } else {
-          noSlots++;
-          links.push({ ...common, slot: "", url: base });
-        }
-      });
-    }
-    log(`[${T.name}] активних ${camps.length} · із трафіком за ${TRAFFIC_DAYS} дн ${rows.length}` +
-        ` · зі слотами ${withSlots} · без слотів ${noSlots} · лінків ${links.length} · оферів ${offers.length}`);
+      .map((c) => ({ c, kt, team: T.name, clicks: clicks.get(String(c.id)) || 0, ...parseCampaign(c.name) }))
+      .filter((r) => r.clicks > 0 && wantGeo(r.geo, sp));
+    cand.push(...rows);
+    log(`[${T.name}] активних ${camps.length} · із трафіком за ${TRAFFIC_DAYS} дн ${rows.length} · оферів ${offers.length}`);
   }
+  cand.sort((a, b) => b.clicks - a.clicks);
+
+  // Потоки тягнемо лише для тих кампаній, що реально підуть у перевірку:
+  // зайвих запитів по всьому списку робити немає сенсу.
+  let withSlots = 0, noSlots = 0;
+  for (let i = 0; i < cand.length && links.length < limit; i += 10) {
+    const batch = cand.slice(i, i + 10);
+    const streams = await Promise.all(batch.map((r) =>
+      r.kt.get(`/campaigns/${r.c.id}/streams`).catch(() => [])));
+    batch.forEach((r, k) => {
+      const base = String(r.c.domain).replace(/\/+$/, "") + "/" + r.c.alias;
+      const slots = slotsFromStreams(streams[k], r.geo);
+      const common = { tab: r.team, clicks: r.clicks, brand: r.c.name, partner: r.prefix,
+                       geoRaw: r.geo, ref: "", row: r.c.id };
+      if (slots.length) {
+        withSlots++;
+        for (const sl of slots) links.push({ ...common, slot: sl,
+          url: `${base}?${SLOT_PARAM}=${encodeURIComponent(sl)}` });
+      } else {
+        noSlots++;
+        links.push({ ...common, slot: "", url: base });
+      }
+    });
+  }
+  log(`Кампаній-кандидатів ${cand.length} · зі слотами ${withSlots} · без слотів ${noSlots} · лінків ${links.length}`);
+
   if (!links.length && !sp.all) throw new Error(`під scope="${scope}" не знайшлось кампаній із трафіком`);
   return { links, offerHosts };
 }
