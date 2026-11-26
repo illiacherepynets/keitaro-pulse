@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       scope:
-        description: 'Що перевіряти: all · гео (IT) · кілька гео (IT,DK) · точна назва вкладки'
+        description: 'Що перевіряти: all · гео (IT) · кілька гео (IT,DK) · назва команди'
         default: 'all'
       limit:
         description: 'Максимум лінків за прогін (страховка від зайвого трафіку)'
@@ -18,7 +18,7 @@ on:
         options: [mobile, desktop]
         default: mobile
       selftest:
-        description: 'Самоперевірка проксі замість лінків: список країн, напр. it,dk,es (таблиця не потрібна)'
+        description: 'Самоперевірка проксі замість лінків: список країн, напр. it,dk,es'
         default: ''
       probe:
         description: 'Разовий зонд Keitaro: показати, які поля віддає API (нічого не перевіряє)'
@@ -47,7 +47,6 @@ jobs:
         env:
           KT_TEAMS: ${{ secrets.KT_TEAMS }}
           KT_PROXY: ${{ secrets.KT_PROXY }}
-          KT_GSHEET: ${{ secrets.KT_GSHEET }}
           KT_PASSWORD: ${{ secrets.KT_PASSWORD }}
           TDS_SCOPE: ${{ inputs.scope }}
           TDS_LIMIT: ${{ inputs.limit }}

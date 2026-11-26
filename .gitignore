@@ -6,3 +6,6 @@ dashboard.html
 public/
 node_modules/
 *.zip
+
+# Відкритий результат перевірки ТДС — лише для локальних тестів
+data/tds.json

@@ -780,7 +780,7 @@ function KT_boot(D){
               <div class="tools">
                 <div class="seg alt" id="tdsFilt"><button data-f="bad">⚠ Проблемні</button><button data-f="all">Усі</button><button data-f="ok">Працюють</button></div>
                 <select class="pill" id="tdsGeo" title="Гео"></select>
-                <input class="search" id="tdsSearch" placeholder="бренд, партнер, хост…">
+                <input class="search" id="tdsSearch" placeholder="кампанія, префікс, хост…">
                 <button class="mbtn primary" id="tdsRun" type="button">Перевірити</button>
               </div>
             </div>
@@ -1865,16 +1865,18 @@ function KT_boot(D){
   // workflow «Перевірка ТДС», а не нічна збірка, тож вони оновлюються окремо.
   // Пароль той самий, він уже в sessionStorage після входу.
   const TDSV = {
-    ok:       {t:"працює",        c:"ok",   d:"дійшли до сторінки, куди веде афка"},
-    mismatch: {t:"не туди",       c:"warn", d:"сторінка відкрилась, але ланцюг не пройшов через посилання афки"},
+    ok:       {t:"працює",        c:"ok",   d:"юзер вийшов із трекера на офер"},
+    lander:   {t:"ленд",          c:"ok",   d:"сторінка на домені трекера — локальний ленд, далі юзер іде кліком"},
+    mismatch: {t:"не туди",       c:"warn", d:"вийшли на хост, якого немає серед оферів Keitaro"},
+    empty:    {t:"порожньо",      c:"bad",  d:"трекер нічого не віддав: під це гео й девайс не підібрався жоден потік"},
     blocked:  {t:"блокує",        c:"bad",  d:"на шляху стоїть захист, капча або бан"},
     http:     {t:"помилка",       c:"bad",  d:"сервер віддав помилку"},
     dead:     {t:"не відкрилась", c:"bad",  d:"не достукались до хоста"},
     loop:     {t:"петля",         c:"warn", d:"редіректи ходять по колу"},
     proxy:    {t:"проксі",        c:"mute", d:"не вина лінка: не вийшло вийти з цієї країни"},
-    skip:     {t:"пропущено",     c:"mute", d:"у рядку незрозуміле гео"},
+    skip:     {t:"пропущено",     c:"mute", d:"у назві кампанії не знайшлось гео"},
   };
-  const TDS_ORDER = ["blocked","dead","http","mismatch","loop","ok","proxy","skip"];
+  const TDS_ORDER = ["empty","blocked","dead","http","mismatch","loop","lander","ok","proxy","skip"];
   const TDSC = {ok:"var(--good)",bad:"var(--crit)",warn:"var(--warn)",mute:"var(--border-strong)"};
 
   let TDS=null, tdsState="idle", tdsFilt="bad", tdsQ="", tdsGeo="all";
@@ -1905,28 +1907,31 @@ function KT_boot(D){
       return tdsInfo(
         `<div style="font-size:13px;color:var(--dim);line-height:1.7">`+
         `<b style="color:var(--fg)">Перевірки ще не було.</b><br>`+
-        `Запускається вона вручну: <b>Actions → «Перевірка ТДС-лінків» → Run workflow</b>. `+
-        `Кожен лінк відкривається з резидентської IP тієї країни, для якої він зроблений, `+
-        `і скрипт іде по всьому ланцюгу редіректів — включно з <span class="mono">meta refresh</span> і `+
-        `переходами зі скрипта — щоб побачити, куди реально потрапляє юзер.<br><br>`+
-        `Щоб воно запрацювало, у <b>Settings → Secrets → Actions</b> мають бути:<br>`+
-        `<span class="mono">KT_PROXY</span> — доступ до DataImpulse, `+
-        `<span class="mono">KT_GSHEET</span> — сервісний акаунт Google із доступом до таблиці з лінками.</div>`);
+        `Запускається вона вручну — кнопкою <b>«Перевірити»</b> вище або через <b>Actions → «Перевірка ТДС-лінків»</b>.<br><br>`+
+        `Лінки беруться з самого Keitaro: кампанія і є ТДС. Беремо ті, що мали трафік за останній тиждень, `+
+        `відкриваємо кожну з резидентської IP тієї країни, яка вказана в назві кампанії, і йдемо по всьому `+
+        `ланцюгу редіректів — включно з <span class="mono">meta refresh</span> і переходами зі скрипта — `+
+        `щоб побачити, куди реально потрапляє юзер.<br><br>`+
+        `Єдине, що для цього потрібно, — секрет <span class="mono">KT_PROXY</span> у `+
+        `<b>Settings → Secrets → Actions</b>: доступ до резидентських проксі.</div>`);
     }
     if(tdsState==="idle"){ loadTds(); return tdsInfo("Розшифровую результати…"); }
     if(tdsState==="loading") return tdsInfo("Розшифровую результати…");
     if(tdsState==="err") return tdsInfo(`<span style="color:var(--crit-ink)">Не вдалось прочитати результати: ${esc(TDS.err)}</span>`);
 
     const rows=TDS.rows||[], chains=TDS.chains||[];
-    const okN=TDS.stat.ok||0, bad=rows.length-okN;
+    // Кампанії без гео не перевірялись — їх немає сенсу тримати у знаменнику.
+    const skipN=TDS.stat.skip||0;
+    const checkedN=rows.length-skipN;
+    const okN=(TDS.stat.ok||0)+(TDS.stat.lander||0), bad=checkedN-okN;
     const when=new Date(TDS.checkedAt);
     const ageH=(Date.now()-when.getTime())/3600e3;
 
     document.getElementById("tdsKpis").innerHTML=[
       {lbl:"Перевірено лінків",v:fmtInt(rows.length),c:"var(--s1)",
-       sub:TDS.total>rows.length?`з ${fmtInt(TDS.total)} у таблиці (ліміт прогону)`:"усі з таблиці"},
+       sub:TDS.total>rows.length?`з ${fmtInt(TDS.total)} кампаній із трафіком (ліміт прогону)`:`усі кампанії з трафіком за ${TDS.trafficDays||7} дн`},
       {lbl:"Доходять до сторінки",v:fmtInt(okN),c:okN?"var(--good)":"var(--crit)",
-       sub:rows.length?`${(okN/rows.length*100).toFixed(0)}% перевірених`:""},
+       sub:checkedN?`${(okN/checkedN*100).toFixed(0)}% перевірених`:""},
       {lbl:"Потребують уваги",v:fmtInt(bad),c:bad?"var(--crit)":"var(--good)",
        sub:bad?"є що скинути афіліату":"усе чисто"},
       {lbl:"Коли перевіряли",v:fmtAge(Date.now()-when.getTime()),
@@ -1955,8 +1960,11 @@ function KT_boot(D){
 
     const q=tdsQ.toLowerCase();
     let view=rows.map((r,i)=>({r,i})).filter(({r})=>{
-      if(tdsFilt==="ok"&&r[6]!=="ok") return false;
-      if(tdsFilt==="bad"&&r[6]==="ok") return false;
+      // «skip» — це кампанія без гео в назві, а не зламаний лінк: у проблемні
+      // вона не йде, інакше список тоне в тому, що нічого не означає.
+      const fine = r[6]==="ok"||r[6]==="lander";
+      if(tdsFilt==="ok"&&!fine) return false;
+      if(tdsFilt==="bad"&&(fine||r[6]==="skip")) return false;
       if(tdsGeo!=="all"&&r[4]!==tdsGeo) return false;
       if(q&&!((r[2]+" "+r[3]+" "+r[7]+" "+r[12]).toLowerCase().includes(q))) return false;
       return true;
@@ -1965,15 +1973,16 @@ function KT_boot(D){
     view.sort((a,b)=>TDS_ORDER.indexOf(a.r[6])-TDS_ORDER.indexOf(b.r[6])||String(a.r[2]).localeCompare(b.r[2],"uk"));
 
     document.getElementById("tdsSub").textContent=
-      `${TDS.scope==="all"?"уся таблиця":"обране: "+TDS.scope} · ${TDS.tabs.length} ${plural(TDS.tabs.length,["вкладка","вкладки","вкладок"])}`;
+      `${TDS.scope==="all"?"усі команди":"обране: "+TDS.scope} · ${TDS.tabs.length} ${plural(TDS.tabs.length,["команда","команди","команд"])}`
+      + (TDS.offerHosts?` · довідник оферів: ${fmtInt(TDS.offerHosts)} ${plural(TDS.offerHosts,["хост","хости","хостів"])}`:"");
 
-    const html=[`<thead><tr><th>Бренд</th><th>Партнер</th><th>Гео</th><th>Вердикт</th>`+
+    const html=[`<thead><tr><th>Кампанія</th><th>Префікс</th><th>Гео</th><th>Вердикт</th>`+
       `<th>Де опинились</th><th class="r">Кроків</th><th class="r">Час</th><th>Що саме</th></tr></thead><tbody>`];
     if(!view.length) html.push(`<tr><td colspan="8" style="color:var(--faint);padding:18px 10px">Під фільтр нічого не підпало.</td></tr>`);
     for(const {r,i} of view){
       const v=TDSV[r[6]]||TDSV.skip, open=tdsOpen.has(i);
       html.push(`<tr class="tdsrow" tabindex="0" role="button" data-key="1" data-i="${i}">`+
-        `<td><b>${esc(r[2]||"—")}</b>${r[1]?` <span class="chip">${esc(r[1])}</span>`:""}</td>`+
+        `<td><b>${esc(r[2]||"—")}</b>${r[1]?` <span class="chip" title="кліків за ${TDS.trafficDays||7} дн">${fmtInt(r[1])}</span>`:""}</td>`+
         `<td style="color:var(--dim)">${esc(r[3]||"—")}</td>`+
         `<td><span class="chip geo"${r[5]&&r[4].toLowerCase()!==r[5]?` title="у таблиці: ${esc(r[4])}"`:""}>${esc((r[5]||r[4]||"—").toUpperCase())}</span></td>`+
         `<td><span class="vd ${v.c}" title="${esc(v.d)}">${v.t}</span></td>`+
@@ -1994,7 +2003,7 @@ function KT_boot(D){
               `${c[5]?`<div class="ti" style="color:var(--crit-ink)">${esc(c[5])}</div>`:""}</span></li>`;
           }).join(""):`<li><span class="hop"></span><span class="st"></span><span class="ti">Запит навіть не пішов.</span></li>`)+
           `</ul>`+
-          (r[8]?`<div class="hint" style="margin:0">Очікували побачити в ланцюгу <span class="mono">${esc(r[8])}</span> — хост посилання афіліата з таблиці.</div>`:"")+
+          (r[8]?`<div class="hint" style="margin:0">Домен трекера — <span class="mono">${esc(r[8])}</span>. Робочий лінк має вивести за його межі, на хост із довідника оферів Keitaro.</div>`:"")+
           `</td></tr>`);
       }
     }
@@ -2005,7 +2014,8 @@ function KT_boot(D){
     });
 
     foot.innerHTML=`Показано ${fmtInt(view.length)} із ${fmtInt(rows.length)}. Клік по рядку — весь ланцюг редіректів. `+
-      `Перевірка йде з резидентської IP країни лінка, з ${TDS.ua==="desktop"?"десктопного":"мобільного"} браузера.`;
+      `Перевірка йде з резидентської IP країни з назви кампанії, з ${TDS.ua==="desktop"?"десктопного":"мобільного"} браузера.`+
+      (skipN?` У ${fmtInt(skipN)} ${plural(skipN,["кампанії","кампаній","кампаній"])} у назві немає гео — їх не перевіряли.`:"");
   }
 
   document.getElementById("tdsFilt").addEventListener("click",e=>{
@@ -2172,8 +2182,9 @@ function KT_boot(D){
     const has=!!tokGet();
     const geos=TDS&&TDS.rows?[...new Set(TDS.rows.map(r=>r[4]).filter(Boolean))].sort():[];
     mBody.innerHTML=
-      `<p>Перевірка відкриває кожен лінк з резидентської IP <b>тієї країни, для якої він зроблений</b>, `+
-      `і йде по всьому ланцюгу редіректів до фінальної сторінки. Прогін на всю таблицю — кілька хвилин.</p>`+
+      `<p>Перевірка бере кампанії з Keitaro, які мали трафік за останній тиждень, і відкриває кожну `+
+      `з резидентської IP <b>тієї країни, що вказана в назві кампанії</b>, ідучи по всьому ланцюгу `+
+      `редіректів до фінальної сторінки. Прогін на кілька сотень лінків — кілька хвилин.</p>`+
       `<p class="mnote">Резидентський трафік платний, тому це не крутиться щоночі. Якщо треба швидко — звузь до одного гео.</p>`+
       `<div class="mrow"><select class="pill" id="tScope"><option value="all">Усі гео</option>`+
         geos.map(g=>`<option value="${esc(g)}">лише ${esc(g)}</option>`).join("")+`</select>`+

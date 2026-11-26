@@ -12,6 +12,8 @@ import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, join, isAbsolute, resolve } from "node:path";
 import { encryptData } from "./crypto.mjs";
+// Розбір назви кампанії спільний із tds.mjs: гео звідти задає країну перевірки.
+import { parseCampaign } from "./campaign.mjs";
 
 // ── КОНФІГ (НЕ секретне) ─────────────────────────────────────────────────────
 const TZ          = "Europe/Kyiv";  // має збігатись з таймзоною звіту в Keitaro
@@ -70,17 +72,6 @@ const METRICS = ["clicks", "conversions", "leads", "sales", "revenue", "sale_rev
 // теж не рахуються: Keitaro їх не підставляє, мережа отримає текст як є.
 const CLICKID_MACRO = /\{(subid|sub_id|click_id|clickid|external_id|visit_id|sub_id_\d+|sub\d+)\}/i;
 
-// ── Розбір назви кампанії: префікс (мережа) / гео ────────────────────────────
-const GEOS = new Set(("IT NL DE FR BE UK GB PL FI HU MY DK ES PT SE NO AT CH IE CA AU US " +
-  "JP IN BR MX CL CO AR RU UA TR GR RO CZ SK BG HR SI LT LV EE NZ ZA SG TH VN PH ID KR " +
-  "SA AE QA KW IL EG MA NG KE DZ TN LK BD PK").split(" "));
-function parseCampaign(name) {
-  const tokens = String(name).split(/[\s_]+/).filter(Boolean);
-  let geo = "";
-  for (const t of tokens) { if (/^[A-Z]{2}$/.test(t) && GEOS.has(t)) { geo = t === "GB" ? "UK" : t; break; } }
-  const prefix = tokens[0] && /^[A-Z0-9]{2,}$/.test(tokens[0]) ? tokens[0] : "—";
-  return { prefix, geo: geo || "—" };
-}
 
 function monthChunks(fromDay, toDay) {
   const chunks = [];

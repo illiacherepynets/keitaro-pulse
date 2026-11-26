@@ -10,24 +10,27 @@
 // Запускати лише в GitHub Actions: з пісочниці агента gw.dataimpulse.com
 // недоступний на жодному порту (connection refused), раннери ходять напряму.
 //
+// Лінки беремо з самого Keitaro: кампанія і є ТДС, її публічне посилання —
+// це domain + alias, а гео — з назви кампанії. Окремого джерела не треба.
+//
 // Секрети (env):
 //   KT_PROXY    {"host","port","user","pass"[,"geoMap":{"ZH":"cn"}]}
-//   KT_GSHEET   {"sheet_id","client_email","private_key"}  — сервісний акаунт Google
-//   KT_PASSWORD — той самий пароль, що відкриває дашборд
+//   KT_TEAMS    той самий конфіг команд, що й у збірці
+//   KT_PASSWORD той самий пароль, що відкриває дашборд
 // Входи (env, з workflow_dispatch):
-//   TDS_SCOPE  "all" | "IT" | "IT,DK" | точна назва вкладки   (типово all)
+//   TDS_SCOPE  "all" | гео ("IT" / "IT,DK") | назва команди   (типово all)
 //   TDS_LIMIT  максимум лінків за прогін                      (типово 400)
 //   TDS_UA     "mobile" | "desktop"                           (типово mobile)
-//   TDS_FILE   локальний JSON замість таблиці — для офлайн-тестів
+//   TDS_FILE   локальний JSON замість Keitaro — для офлайн-тестів
 // Вихід: data/tds.enc — той самий формат, що й дані дашборда.
 // ─────────────────────────────────────────────────────────────────────────────
 import net from "node:net";
 import tls from "node:tls";
-import { createSign } from "node:crypto";
 import { writeFile, mkdir, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { encryptData } from "./crypto.mjs";
+import { parseCampaign } from "./campaign.mjs";
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const log = (...a) => console.log("•", ...a);
@@ -49,142 +52,97 @@ const LANG = { IT:"it-IT,it;q=0.9", ES:"es-ES,es;q=0.9", SE:"sv-SE,sv;q=0.9",
 const UA_MOBILE  = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1";
 const UA_DESKTOP = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 
-// Вкладки з паролями партнерських кабінетів читати НЕ можна — ні в дашборд,
-// ні в лог. Відсікаємо за назвою, а потім ще раз за назвою колонки.
-const TAB_DENY = /partner|пароли|passwords|accounts/i;
-const COL_DENY = /pass|парол|login|логин|логін|token|2fa|e-?mail|почта|пошта/i;
 
-// ── Google Sheets: сервісний акаунт → читання лише потрібних вкладок ─────────
-const b64url = (b) => Buffer.from(b).toString("base64").replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
+// ── Keitaro: звідки беруться ТДС-лінки ──────────────────────────────────────
+// Кампанія в Keitaro і є ТДС: її публічне посилання складається з `domain`
+// (готовий URL) і `alias`. Гео беремо з назви кампанії тим самим розбором, що
+// й збірка, — саме воно каже, з якої країни має дивитись перевірка.
+//
+// Активних кампаній близько двох тисяч. Ганяти їх усі через платні
+// резидентські проксі безглуздо, тому беремо лише ті, що реально мали трафік
+// за останні дні, і йдемо від найбільших: зламаний лінк, через який ніхто не
+// ходить, нікому не болить.
+const TRAFFIC_DAYS = 7;
+const TZ = "Europe/Kyiv";
+const dayAgo = (n) => new Date(Date.now() - n * 864e5).toISOString().slice(0, 10);
+const num = (v) => { const n = Number(v); return isNaN(n) ? 0 : n; };
 
-async function googleToken(sa) {
-  const now = Math.floor(Date.now() / 1000);
-  const head  = b64url(JSON.stringify({ alg: "RS256", typ: "JWT" }));
-  const claim = b64url(JSON.stringify({
-    iss: sa.client_email,
-    scope: "https://www.googleapis.com/auth/spreadsheets.readonly",
-    aud: "https://oauth2.googleapis.com/token",
-    exp: now + 3600, iat: now,
-  }));
-  // Секрет у GitHub часто зберігають із літеральними \n — повертаємо переноси.
-  const pem = String(sa.private_key || "").replace(/\\n/g, "\n");
-  const sig = createSign("RSA-SHA256").update(`${head}.${claim}`).sign(pem);
-  const jwt = `${head}.${claim}.${b64url(sig)}`;
-  const res = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer", assertion: jwt }),
-    signal: AbortSignal.timeout(30_000),
-  });
-  const j = await res.json().catch(() => ({}));
-  if (!res.ok || !j.access_token) {
-    throw new Error(`Google OAuth ${res.status}: ${j.error_description || j.error || "без токена"}`);
-  }
-  return j.access_token;
+function ktClient(url, key) {
+  const API = String(url).replace(/\/+$/, "") + "/admin_api/v1";
+  const headers = { "Api-Key": key, "Content-Type": "application/json" };
+  const go = async (path, init) => {
+    const r = await fetch(API + path, { headers, ...(init || {}), signal: AbortSignal.timeout(120_000) });
+    if (!r.ok) throw new Error(`Keitaro ${path} → HTTP ${r.status}`);
+    const j = await r.json();
+    return Array.isArray(j) ? j : (j.rows || []);
+  };
+  return {
+    get: go,
+    report: (grouping, from, to, metrics) => go("/report/build", {
+      method: "POST",
+      body: JSON.stringify({
+        range: { from: from + " 00:00:00", to: to + " 23:59:59", timezone: TZ },
+        grouping, metrics, filters: [], sort: [], summary: false, limit: 100000, offset: 0,
+      }),
+    }),
+  };
 }
 
-async function sheetsGet(path, token) {
-  const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${path}`, {
-    headers: { Authorization: "Bearer " + token },
-    signal: AbortSignal.timeout(60_000),
-  });
-  const j = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(`Sheets ${res.status}: ${j.error?.message || "помилка"}`);
-  return j;
+// scope: "all" | гео через кому ("IT,DK") | назва команди | і те, і те.
+function scopeParts(scope) {
+  const t = String(scope || "all").split(",").map((x) => x.trim()).filter(Boolean);
+  const all = !t.length || t.length === 1 && t[0].toLowerCase() === "all";
+  return {
+    all,
+    geos: t.filter((x) => /^[A-Za-z]{2}$/.test(x)).map((x) => x.toUpperCase()),
+    names: t.filter((x) => !/^[A-Za-z]{2}$/.test(x) && x.toLowerCase() !== "all").map((x) => x.toLowerCase()),
+  };
 }
-
-const quoteRange = (tab) => `'${String(tab).replace(/'/g, "''")}'!A1:Z600`;
-
-// Яку вкладку беремо. scope: "all" | список гео | точна назва вкладки.
-function wantTab(title, scope) {
-  if (TAB_DENY.test(title)) return false;            // там паролі — не чіпаємо
-  if (/^all project/i.test(title)) return false;     // це карта сайтів, не лінки
-  if (scope === "all") return true;
-  const want = scope.split(",").map((s) => s.trim()).filter(Boolean);
-  return want.some((w) =>
-    w.toLowerCase() === title.trim().toLowerCase() ||
-    (/^[A-Za-z]{2}$/.test(w) && new RegExp(`(^|[_\\s])${w}(\\s|_|$)`, "i").test(title)));
-}
-
-const norm = (s) => String(s ?? "").trim();
-const low  = (s) => norm(s).toLowerCase();
-
-// Шапка в цих вкладках стоїть не завжди в першому рядку (зверху буває обʼєднаний
-// заголовок проєкту), тому шукаємо рядок, де є колонка TDS.
-function findHeader(rows) {
-  for (let i = 0; i < Math.min(rows.length, 8); i++) {
-    const r = rows[i] || [];
-    if (r.some((c) => /^tds\b/i.test(norm(c)))) return i;
-  }
-  return -1;
-}
-
-function parseTab(title, rows) {
-  const hi = findHeader(rows);
-  if (hi < 0) return { links: [], why: "немає колонки TDS" };
-  const head = (rows[hi] || []).map(norm);
-  const col = (re) => head.findIndex((h) => re.test(h) && !COL_DENY.test(h));
-  const cTds   = col(/^tds\b/i);
-  const cGeo   = col(/^geo\b/i);
-  const cBrand = col(/^brand\b/i);
-  const cPart  = col(/^partners?\b/i);
-  const cPos   = col(/^pos\b/i);
-  const cRefNew= col(/^new\s*ref\s*link/i);
-  const cRefOld= col(/^ref\s*link/i);
-  const tabGeo = (title.match(/[_\s]([A-Za-z]{2})\s*$/) || [])[1] || "";
-
-  const links = [];
-  for (let i = hi + 1; i < rows.length; i++) {
-    const r = rows[i] || [];
-    const url = norm(r[cTds]);
-    if (!/^https?:\/\//i.test(url)) continue;
-    const ref = norm(cRefNew >= 0 ? r[cRefNew] : "") || norm(cRefOld >= 0 ? r[cRefOld] : "");
-    links.push({
-      tab: title,
-      pos: cPos >= 0 ? norm(r[cPos]) : "",
-      brand: cBrand >= 0 ? norm(r[cBrand]) : "",
-      partner: cPart >= 0 ? norm(r[cPart]) : "",
-      geoRaw: (cGeo >= 0 ? norm(r[cGeo]) : "") || tabGeo,
-      url,
-      ref: /^https?:\/\//i.test(ref) ? ref : "",
-      row: i + 1,
-    });
-  }
-  return { links, why: "" };
-}
+const wantTeam = (name, sp) => sp.all || !sp.names.length || sp.names.includes(String(name).toLowerCase());
+const wantGeo  = (geo,  sp) => sp.all || !sp.geos.length  || sp.geos.includes(geo);
 
 async function loadLinks(scope) {
   if (process.env.TDS_FILE) {                       // офлайн-режим для тестів
     const j = JSON.parse(await readFile(process.env.TDS_FILE, "utf8"));
     const links = Array.isArray(j) ? j : j.links;
     log(`Джерело: файл ${process.env.TDS_FILE} — ${links.length} лінків`);
-    return links;
+    return { links, offerHosts: new Set() };
   }
-  const raw = process.env.KT_GSHEET;
-  if (!raw) throw new Error("немає секрету KT_GSHEET — нічим читати таблицю");
-  const sa = JSON.parse(raw);
-  const id = sa.sheet_id || process.env.KT_SHEET_ID;
-  if (!id) throw new Error("у KT_GSHEET немає sheet_id");
-  const token = await googleToken(sa);
-  const meta = await sheetsGet(`${id}?fields=properties.title,sheets.properties.title`, token);
-  const all = (meta.sheets || []).map((s) => s.properties.title);
-  const take = all.filter((t) => wantTab(t, scope));
-  log(CI ? `Таблиця: вкладок ${all.length}, беремо ${take.length}`
-         : `Таблиця «${meta.properties?.title || "?"}»: вкладок ${all.length}, беремо ${take.length}`);
-  if (!take.length) throw new Error(`жодна вкладка не підійшла під scope="${scope}"`);
+  const raw = process.env.KT_TEAMS;
+  if (!raw) throw new Error("немає секрету KT_TEAMS — нема звідки брати кампанії");
+  const cfg = JSON.parse(raw);
+  const teams = (Array.isArray(cfg) ? cfg : cfg.teams) || [];
+  const sp = scopeParts(scope);
+  const links = [], offerHosts = new Set();
 
-  const links = [];
-  for (let i = 0; i < take.length; i += 20) {        // batchGet обмежений довжиною URL
-    const part = take.slice(i, i + 20);
-    const qs = part.map((t) => `ranges=${encodeURIComponent(quoteRange(t))}`).join("&");
-    const j = await sheetsGet(`${id}/values:batchGet?${qs}&majorDimension=ROWS`, token);
-    (j.valueRanges || []).forEach((vr, k) => {
-      const { links: L, why } = parseTab(part[k], vr.values || []);
-      if (why) log(CI ? `  ⚠ одну вкладку пропущено: ${why}` : `  ⚠ ${part[k]}: ${why}`);
-      links.push(...L);
+  for (const T of teams) {
+    if (!wantTeam(T.name, sp)) continue;
+    const kt = ktClient(T.url, T.key);
+    let camps = [], offers = [], traffic = [];
+    try {
+      [camps, offers] = await Promise.all([kt.get("/campaigns"), kt.get("/offers")]);
+      // Якщо звіт не віддався — не падаємо: просто втрачаємо сортування за трафіком.
+      traffic = await kt.report(["campaign_id"], dayAgo(TRAFFIC_DAYS), dayAgo(1), ["clicks"]).catch(() => []);
+    } catch (e) { log(`[${T.name}] ✖ ${hide(e.message)} — команду пропущено`); continue; }
+
+    for (const o of offers) { const h = hostOf(o.action_payload); if (h) offerHosts.add(h); }
+    const clicks = new Map(traffic.map((r) => [String(r.campaign_id), num(r.clicks)]));
+
+    const rows = camps
+      .filter((c) => c.state === "active" && c.alias && /^https?:\/\//i.test(String(c.domain || "")))
+      .map((c) => ({ c, clicks: clicks.get(String(c.id)) || 0, ...parseCampaign(c.name) }))
+      .filter((r) => r.clicks > 0 && wantGeo(r.geo, sp))
+      .sort((a, b) => b.clicks - a.clicks);
+
+    for (const r of rows) links.push({
+      tab: T.name, clicks: r.clicks, brand: r.c.name, partner: r.prefix,
+      geoRaw: r.geo, url: String(r.c.domain).replace(/\/+$/, "") + "/" + r.c.alias,
+      ref: "", row: r.c.id,
     });
+    log(`[${T.name}] активних ${camps.length} · із трафіком за ${TRAFFIC_DAYS} дн ${rows.length} · оферів ${offers.length}`);
   }
-  return links;
+  if (!links.length && !sp.all) throw new Error(`під scope="${scope}" не знайшлось кампаній із трафіком`);
+  return { links, offerHosts };
 }
 
 // ── Тунель через DataImpulse ────────────────────────────────────────────────
@@ -349,7 +307,7 @@ const root2  = (h) => h.split(".").slice(-2).join(".");
 const sameHost = (a, b) => !!a && !!b && (a === b || root2(a) === root2(b));
 const titleOf = (body) => (body.match(/<title[^>]*>([\s\S]{0,120}?)<\/title>/i) || [])[1]?.replace(/\s+/g, " ").trim() || "";
 
-async function checkLink(link, proxy, ua) {
+async function checkLink(link, proxy, ua, offerHosts) {
   const cc = ccOf(link.geoRaw, proxy);
   if (!cc) return { verdict: "skip", note: `невідоме гео «${link.geoRaw || "—"}»`, chain: [] };
   const sess = Math.floor(Math.random() * 1e9);
@@ -366,7 +324,7 @@ async function checkLink(link, proxy, ua) {
       break;
     }
     chain.push({ url: cur, status: r.status, via: "", ms: r.ms, title: titleOf(r.body),
-                 blocked: looksBlocked(r.body) });
+                 len: r.body.length, blocked: looksBlocked(r.body) });
     const nx = nextUrl(r, cur);
     if (!nx || !nx.url) break;
     chain[chain.length - 1].via = nx.via;
@@ -376,8 +334,14 @@ async function checkLink(link, proxy, ua) {
   }
 
   const last = chain[chain.length - 1] || {};
-  const refHost = hostOf(link.ref);
-  const passedRef = !refHost || chain.some((c) => sameHost(hostOf(c.url), refHost));
+  const trackerHost = hostOf(link.url);
+  const finalHost = hostOf(last.url);
+  // Чи вийшли взагалі за межі самого трекера і чи торкнулись хоч одного офера
+  // з довідника Keitaro. Перевіряємо весь ланцюг, а не фінальний хост: офер
+  // часто редіректить далі на бренд, якого в довіднику вже немає.
+  const left = !!finalHost && !sameHost(finalHost, trackerHost);
+  const known = offerHosts && offerHosts.size;
+  const touchedOffer = !!known && chain.some((c) => offerHosts.has(hostOf(c.url)));
 
   let verdict, note = "";
   if (err && err.kind === "proxy") { verdict = "proxy"; note = err.message; }
@@ -387,10 +351,15 @@ async function checkLink(link, proxy, ua) {
   else if (last.blocked || last.status === 403 || last.status === 451) { verdict = "blocked"; note = last.title || `HTTP ${last.status}`; }
   else if (last.status >= 400)     { verdict = "http";  note = `HTTP ${last.status}`; }
   else if (last.status === 0)      { verdict = "dead";  note = last.note || "немає відповіді"; }
-  else if (!passedRef)             { verdict = "mismatch"; note = `очікували ${refHost}, прийшли на ${hostOf(last.url)}`; }
+  // Лишились на домені трекера. Порожня відповідь — це «під це гео й девайс не
+  // підібрався жоден потік»; змістовна сторінка — найімовірніше локальний ленд,
+  // з якого юзер іде далі кліком, а клікати перевірка не вміє.
+  else if (!left && (last.len || 0) < 500) { verdict = "empty";  note = "трекер віддав порожню сторінку — під це гео/девайс не підібрався потік"; }
+  else if (!left)                  { verdict = "lander"; note = last.title ? `ленд на домені трекера: ${last.title}` : "ленд на домені трекера — далі потрібен клік"; }
+  else if (known && !touchedOffer) { verdict = "mismatch"; note = `вийшли на ${finalHost} — цього хоста немає серед оферів Keitaro`; }
   else                             { verdict = "ok"; }
 
-  return { verdict, note, chain, cc, finalHost: hostOf(last.url), refHost,
+  return { verdict, note, chain, cc, finalHost, refHost: trackerHost,
            ms: chain.reduce((s, c) => s + (c.ms || 0), 0) };
 }
 
@@ -432,7 +401,7 @@ async function pool(items, n, fn) {
   return out;
 }
 
-const VERDICTS = ["ok", "mismatch", "blocked", "http", "dead", "loop", "proxy", "skip"];
+const VERDICTS = ["ok", "lander", "mismatch", "empty", "blocked", "http", "dead", "loop", "proxy", "skip"];
 
 // Разовий зонд: що саме Keitaro знає про кампанії й домени. Потрібен, бо
 // вгадувати поля тут означало б будувати лінки, яких не існує. У публічний
@@ -522,13 +491,14 @@ async function main() {
 
   if (process.env.TDS_SELFTEST) return selfTest(proxy, ua);
 
-  let links = await loadLinks(scope);
+  let { links, offerHosts } = await loadLinks(scope);
   const total = links.length;
-  if (links.length > limit) { log(`Лінків ${total}, ліміт ${limit} — беремо перші ${limit}`); links = links.slice(0, limit); }
+  // Список уже відсортований за трафіком, тож ліміт відрізає найменш важливе.
+  if (links.length > limit) { log(`Лінків ${total}, ліміт ${limit} — беремо ${limit} найтрафіковіших`); links = links.slice(0, limit); }
   if (!links.length) throw new Error("не знайшов жодного ТДС-лінка");
 
   log(`Перевіряю ${links.length} лінків (${uaKind}, по ${CONCURRENCY} паралельно)…`);
-  const res = await pool(links, CONCURRENCY, (l) => checkLink(l, proxy, ua));
+  const res = await pool(links, CONCURRENCY, (l) => checkLink(l, proxy, ua, offerHosts));
 
   const tabs = [...new Set(links.map((l) => l.tab))];
   const stat = Object.fromEntries(VERDICTS.map((v) => [v, 0]));
@@ -536,7 +506,7 @@ async function main() {
   links.forEach((l, k) => {
     const r = res[k] || { verdict: "dead", note: "без результату", chain: [] };
     stat[r.verdict] = (stat[r.verdict] || 0) + 1;
-    rows.push([tabs.indexOf(l.tab), l.pos, l.brand, l.partner, l.geoRaw, r.cc || "",
+    rows.push([tabs.indexOf(l.tab), l.clicks || 0, l.brand, l.partner, l.geoRaw, r.cc || "",
       r.verdict, r.finalHost || "", r.refHost || "", (r.chain || []).length,
       r.ms || 0, r.note || "", l.url.slice(0, CHAIN_URL_MAX), l.row]);
     chains.push((r.chain || []).map((c) => [String(c.url).slice(0, CHAIN_URL_MAX),
@@ -547,6 +517,7 @@ async function main() {
     checkedAt: new Date().toISOString(),
     generated: new Date().toLocaleString("uk-UA", { timeZone: "Europe/Kyiv" }),
     scope, ua: uaKind, total, checked: links.length, stat, tabs, rows, chains,
+    source: "keitaro", trafficDays: TRAFFIC_DAYS, offerHosts: offerHosts.size,
   };
 
   const password = process.env.KT_PASSWORD || "";
@@ -573,4 +544,4 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   main().catch((e) => { console.error("✖", hide(e.message)); process.exit(1); });
 }
 
-export { parseTab, wantTab, ccOf, findHeader, nextUrl, looksBlocked, sameHost, dechunk };
+export { scopeParts, wantTeam, wantGeo, ccOf, nextUrl, looksBlocked, sameHost, dechunk };
